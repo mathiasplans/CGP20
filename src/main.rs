@@ -31,6 +31,9 @@ use std::iter;
 use std::sync::Arc;
 use std::time::Instant;
 
+use std::collections::HashMap;
+use std::cmp;
+
 #[derive(Default, Copy, Clone)]
 pub struct Vertex {
     position: (f32, f32, f32)
@@ -44,6 +47,171 @@ pub struct Normal {
 vulkano::impl_vertex!(Normal, normal);
 
 vulkano::impl_vertex!(Vertex, position);
+
+type Point = (f32, f32, f32);
+type Face = (u16, u16, u16);
+
+// Inspired by http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html
+struct Icosphere {
+    index: u16,
+    vertex_buffer: Vec<Vertex>,
+    normal_buffer: Vec<Normal>,
+    index_buffer: Vec<u16>,
+    middle_vertex: HashMap<u32, u16>,
+
+    radius: f32,
+    tessellation: u8
+}
+
+impl Icosphere {
+    fn new(radius: f32, tessellation: u8) -> Self {
+        let mut is = Icosphere {
+            index: 0,
+            vertex_buffer: Vec::new(),
+            normal_buffer: Vec::new(),
+            index_buffer: Vec::new(),
+            middle_vertex: HashMap::new(),
+
+            radius: radius,
+            tessellation: tessellation
+        };
+
+        // First, create a icosahedron
+        // icosahedron can be constructed from 3 orthogonal rectangles. This is
+        // the lenght of the side (golden ratio). The other side is 1.
+        let t = (1.0 + 5.0_f32.sqrt()) / 2.0;
+
+        // Rectangle no.1
+        is.addVertex((-1.0,  t, 0.0));
+        is.addVertex(( 1.0,  t, 0.0));
+        is.addVertex((-1.0, -t, 0.0));
+        is.addVertex(( 1.0, -t, 0.0));
+
+        // Rectangle no.2
+        is.addVertex((0.0, -1.0,  t));
+        is.addVertex((0.0,  1.0,  t));
+        is.addVertex((0.0, -1.0, -t));
+        is.addVertex((0.0,  1.0, -t));
+
+        // Rectangle no.3
+        is.addVertex(( t, 0.0, -1.0));
+        is.addVertex(( t, 0.0,  1.0));
+        is.addVertex((-t, 0.0, -1.0));
+        is.addVertex((-t, 0.0,  1.0));
+
+        // Create a vector for holding the faces
+        let mut faces: Vec<Face> = Vec::new();
+
+        faces.push((0, 11, 5));
+        faces.push((0, 5, 1));
+        faces.push((0, 1, 7));
+        faces.push((0, 7, 10));
+        faces.push((0, 10, 11));
+
+        faces.push((1, 5, 9));
+        faces.push((5, 11, 4));
+        faces.push((11, 10, 4));
+        faces.push((10, 7, 6));
+        faces.push((7, 1, 8));
+
+        faces.push((3, 9, 4));
+        faces.push((3, 4, 2));
+        faces.push((3, 2, 6));
+        faces.push((3, 6, 8));
+        faces.push((3, 8, 9));
+
+        faces.push((4, 9, 5));
+        faces.push((2, 4, 11));
+        faces.push((6, 2, 10));
+        faces.push((8, 6, 7));
+        faces.push((9, 8, 1));
+
+        // Tessellate the icosahedron to create icosphere
+        for _i in 0..tessellation {
+            let mut newfaces: Vec<Face> = Vec::new();
+
+            faces.iter().for_each(|x| {
+                // Triangulate the triangle
+                let newv1 = is.getMiddlePoint(x.0, x.1);
+                let newv2 = is.getMiddlePoint(x.1, x.2);
+                let newv3 = is.getMiddlePoint(x.2, x.0);
+
+                newfaces.push((x.0, newv1, newv3));
+                newfaces.push((x.1, newv2, newv1));
+                newfaces.push((x.2, newv3, newv2));
+                newfaces.push((newv1, newv2, newv3));
+            });
+
+            faces = newfaces;
+        }
+
+        // Create index buffer
+        faces.iter().for_each(|x| {
+            is.index_buffer.push(x.0);
+            is.index_buffer.push(x.1);
+            is.index_buffer.push(x.2);
+        });
+
+        is
+    }
+
+    fn addVertex(&mut self, point: Point) -> u16 {
+        // normalize
+        let rad = self.radius;
+        let pointarray = [point.0, point.1, point.2];
+        let r = pointarray.iter().fold(0.0, |acc, x| acc + x.powi(2)).sqrt();
+        let mut normalized = pointarray.iter().map(|x| x / r);
+
+        // Create a normal
+        let normal = (normalized.next().unwrap(), normalized.next().unwrap(), normalized.next().unwrap());
+        self.normal_buffer.push(Normal {
+            normal: normal
+        });
+
+        // Add to vertex_buffer
+        self.vertex_buffer.push(Vertex {
+            position: (normal.0 * rad, normal.1 * rad, normal.2 * rad)
+        });
+
+        self.index += 1;
+        self.index
+    }
+
+    // This function gets the index of a point between two other points
+    fn getMiddlePoint(&mut self, p1: u16, p2: u16) -> u16 {
+
+        // Check for the middle point existance
+        let sindex = cmp::min(p1, p2);
+        let lindex = cmp::max(p1, p2);
+        let key = (u32::from(sindex) << 16) | u32::from(lindex);
+
+        // It exists
+        if self.middle_vertex.contains_key(&key) {
+            *self.middle_vertex.get(&key).unwrap()
+        }
+
+        // The middle point does not exist, create it
+        else {
+            let v1 = self.vertex_buffer[usize::from(p1)];
+            let v2 = self.vertex_buffer[usize::from(p2)];
+            
+            self.addVertex(((v1.position.0 + v2.position.0) / 2.0, (v1.position.1 + v2.position.1) / 2.0, (v1.position.2 + v2.position.2) / 2.0));
+
+            // Add it to the cache
+            self.middle_vertex.insert(key, self.index);
+            
+            self.index
+        }
+    }
+
+    fn getBuffers(self, device: Arc<Device>) -> (Arc<CpuAccessibleBuffer<[Vertex]>>, Arc<CpuAccessibleBuffer<[Normal]>>, Arc<CpuAccessibleBuffer<[u16]>>) {
+        let vbuf = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, self.vertex_buffer.iter().cloned()).unwrap();
+        let nbuf = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, self.normal_buffer.iter().cloned()).unwrap();
+        let ibuf = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, self.index_buffer.iter().cloned()).unwrap();
+
+        (vbuf, nbuf, ibuf)
+    }
+}
 
 fn main() {
     // The start of this example is exactly the same as `triangle`. You should read the
@@ -81,31 +249,12 @@ fn main() {
             FullscreenExclusive::Default, true, ColorSpace::SrgbNonLinear).unwrap()
     };
 
-    // We now create a buffer that will store the shape of our triangle.
-    // This triangle is identical to the one in the `triangle.rs` example.
-    let vertex_buffer = {
-        CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, [
-            Vertex { position: (-0.5, -0.25, 0.0) },
-            Vertex { position: (0.0, 0.5, 0.0) },
-            Vertex { position: (0.25, -0.1, 0.0) }
-        ].iter().cloned()).unwrap()
-    };
+    let icos = Icosphere::new(0.5, 0);
 
-    let normals_buffer = {
-        CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, [
-            Normal { normal: (0.0, 0.0, 1.0) },
-            Normal { normal: (0.0, 0.0, 1.0) },
-            Normal { normal: (0.0, 0.0, 1.0) }
-        ].iter().cloned()).unwrap()
-    };
-
-    let indices: [u16; 3] = [
-        0, 1, 2
-    ];
-    
-    let index_buffer = {
-        CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, indices.iter().cloned()).unwrap()
-    };
+    let buffers = icos.getBuffers(device.clone());
+    let vertex_buffer = buffers.0;
+    let normals_buffer = buffers.1;
+    let index_buffer = buffers.2;
 
     let uniform_buffer = CpuBufferPool::<vs::ty::Data>::new(device.clone(), BufferUsage::all());
 
@@ -330,7 +479,7 @@ mod fs {
             const vec3 LIGHT = vec3(0.0, 0.0, 1.0);
 
             void main() {
-                float brightness = dot(normalize(v_normal), normalize(LIGHT));
+                float brightness = min(dot(normalize(v_normal), normalize(LIGHT)), dot(-normalize(v_normal), normalize(LIGHT)));
                 vec3 dark_color = vec3(0.6, 0.0, 0.0);
                 vec3 regular_color = vec3(1.0, 0.0, 0.0);
 
