@@ -82,22 +82,22 @@ impl Icosphere {
         let t = (1.0 + 5.0_f32.sqrt()) / 2.0;
 
         // Rectangle no.1
-        is.addVertex((-1.0,  t, 0.0));
-        is.addVertex(( 1.0,  t, 0.0));
-        is.addVertex((-1.0, -t, 0.0));
-        is.addVertex(( 1.0, -t, 0.0));
+        is.add_vertex((-1.0,  t, 0.0));
+        is.add_vertex(( 1.0,  t, 0.0));
+        is.add_vertex((-1.0, -t, 0.0));
+        is.add_vertex(( 1.0, -t, 0.0));
 
         // Rectangle no.2
-        is.addVertex((0.0, -1.0,  t));
-        is.addVertex((0.0,  1.0,  t));
-        is.addVertex((0.0, -1.0, -t));
-        is.addVertex((0.0,  1.0, -t));
+        is.add_vertex((0.0, -1.0,  t));
+        is.add_vertex((0.0,  1.0,  t));
+        is.add_vertex((0.0, -1.0, -t));
+        is.add_vertex((0.0,  1.0, -t));
 
         // Rectangle no.3
-        is.addVertex(( t, 0.0, -1.0));
-        is.addVertex(( t, 0.0,  1.0));
-        is.addVertex((-t, 0.0, -1.0));
-        is.addVertex((-t, 0.0,  1.0));
+        is.add_vertex(( t, 0.0, -1.0));
+        is.add_vertex(( t, 0.0,  1.0));
+        is.add_vertex((-t, 0.0, -1.0));
+        is.add_vertex((-t, 0.0,  1.0));
 
         // Create a vector for holding the faces
         let mut faces: Vec<Face> = Vec::new();
@@ -132,9 +132,9 @@ impl Icosphere {
 
             faces.iter().for_each(|x| {
                 // Triangulate the triangle
-                let newv1 = is.getMiddlePoint(x.0, x.1);
-                let newv2 = is.getMiddlePoint(x.1, x.2);
-                let newv3 = is.getMiddlePoint(x.2, x.0);
+                let newv1 = is.get_middle_point(x.0, x.1);
+                let newv2 = is.get_middle_point(x.1, x.2);
+                let newv3 = is.get_middle_point(x.2, x.0);
 
                 newfaces.push((x.0, newv1, newv3));
                 newfaces.push((x.1, newv2, newv1));
@@ -155,7 +155,7 @@ impl Icosphere {
         is
     }
 
-    fn addVertex(&mut self, point: Point) -> u16 {
+    fn add_vertex(&mut self, point: Point) -> u16 {
         // normalize
         let rad = self.radius;
         let pointarray = [point.0, point.1, point.2];
@@ -178,7 +178,7 @@ impl Icosphere {
     }
 
     // This function gets the index of a point between two other points
-    fn getMiddlePoint(&mut self, p1: u16, p2: u16) -> u16 {
+    fn get_middle_point(&mut self, p1: u16, p2: u16) -> u16 {
 
         // Check for the middle point existance
         let sindex = cmp::min(p1, p2);
@@ -195,7 +195,7 @@ impl Icosphere {
             let v1 = self.vertex_buffer[usize::from(p1)];
             let v2 = self.vertex_buffer[usize::from(p2)];
             
-            let newindex = self.addVertex((
+            let newindex = self.add_vertex((
                 (v1.position.0 + v2.position.0) / 2.0, 
                 (v1.position.1 + v2.position.1) / 2.0, 
                 (v1.position.2 + v2.position.2) / 2.0
@@ -208,7 +208,7 @@ impl Icosphere {
         }
     }
 
-    fn getBuffers(self, device: Arc<Device>) -> (Arc<CpuAccessibleBuffer<[Vertex]>>, Arc<CpuAccessibleBuffer<[Normal]>>, Arc<CpuAccessibleBuffer<[u16]>>) {
+    fn get_buffers(self, device: Arc<Device>) -> (Arc<CpuAccessibleBuffer<[Vertex]>>, Arc<CpuAccessibleBuffer<[Normal]>>, Arc<CpuAccessibleBuffer<[u16]>>) {
         let vbuf = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, self.vertex_buffer.iter().cloned()).unwrap();
         let nbuf = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, self.normal_buffer.iter().cloned()).unwrap();
         let ibuf = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, self.index_buffer.iter().cloned()).unwrap();
@@ -252,7 +252,7 @@ fn main() {
 
     let icos = Icosphere::new(0.5, 2);
 
-    let buffers = icos.getBuffers(device.clone());
+    let buffers = icos.get_buffers(device.clone());
     let vertex_buffer = buffers.0;
     let normals_buffer = buffers.1;
     let index_buffer = buffers.2;
