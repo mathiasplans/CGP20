@@ -78,7 +78,7 @@ impl Icosphere {
 
         // First, create a icosahedron
         // icosahedron can be constructed from 3 orthogonal rectangles. This is
-        // the lenght of the side (golden ratio). The other side is 1.
+        // the lenght of the side (golden ratio). The other side is 2 * 1.
         let t = (1.0 + 5.0_f32.sqrt()) / 2.0;
 
         // Rectangle no.1
@@ -110,7 +110,7 @@ impl Icosphere {
 
         faces.push((1, 5, 9));
         faces.push((5, 11, 4));
-        faces.push((11, 10, 4));
+        faces.push((11, 10, 2));
         faces.push((10, 7, 6));
         faces.push((7, 1, 8));
 
@@ -127,7 +127,7 @@ impl Icosphere {
         faces.push((9, 8, 1));
 
         // Tessellate the icosahedron to create icosphere
-        for _i in 0..tessellation {
+        for _i in 0..is.tessellation {
             let mut newfaces: Vec<Face> = Vec::new();
 
             faces.iter().for_each(|x| {
@@ -159,8 +159,8 @@ impl Icosphere {
         // normalize
         let rad = self.radius;
         let pointarray = [point.0, point.1, point.2];
-        let r = pointarray.iter().fold(0.0, |acc, x| acc + x.powi(2)).sqrt();
-        let mut normalized = pointarray.iter().map(|x| x / r);
+        let amplitude = pointarray.iter().fold(0.0, |acc, x| acc + x.powi(2)).sqrt();
+        let mut normalized = pointarray.iter().map(|x| x / amplitude);
 
         // Create a normal
         let normal = (normalized.next().unwrap(), normalized.next().unwrap(), normalized.next().unwrap());
@@ -174,7 +174,7 @@ impl Icosphere {
         });
 
         self.index += 1;
-        self.index
+        self.index - 1
     }
 
     // This function gets the index of a point between two other points
@@ -195,12 +195,16 @@ impl Icosphere {
             let v1 = self.vertex_buffer[usize::from(p1)];
             let v2 = self.vertex_buffer[usize::from(p2)];
             
-            self.addVertex(((v1.position.0 + v2.position.0) / 2.0, (v1.position.1 + v2.position.1) / 2.0, (v1.position.2 + v2.position.2) / 2.0));
+            let newindex = self.addVertex((
+                (v1.position.0 + v2.position.0) / 2.0, 
+                (v1.position.1 + v2.position.1) / 2.0, 
+                (v1.position.2 + v2.position.2) / 2.0
+            ));
 
             // Add it to the cache
-            self.middle_vertex.insert(key, self.index);
+            self.middle_vertex.insert(key, newindex);
             
-            self.index
+            newindex
         }
     }
 
@@ -214,9 +218,6 @@ impl Icosphere {
 }
 
 fn main() {
-    // The start of this example is exactly the same as `triangle`. You should read the
-    // `triangle` example if you haven't done so yet.
-
     let required_extensions = vulkano_win::required_extensions();
     let instance = Instance::new(None, &required_extensions, None).unwrap();
     let physical = PhysicalDevice::enumerate(&instance).next().unwrap();
@@ -249,7 +250,7 @@ fn main() {
             FullscreenExclusive::Default, true, ColorSpace::SrgbNonLinear).unwrap()
     };
 
-    let icos = Icosphere::new(0.5, 0);
+    let icos = Icosphere::new(0.5, 2);
 
     let buffers = icos.getBuffers(device.clone());
     let vertex_buffer = buffers.0;
@@ -321,8 +322,6 @@ fn main() {
                     let rotation = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0;
                     let rotation = Matrix3::from_angle_y(Rad(rotation as f32));
 
-                    // note: this teapot was meant for OpenGL where the origin is at the lower left
-                    //       instead the origin is at the upper left in Vulkan, so we reverse the Y axis
                     let aspect_ratio = dimensions[0] as f32 / dimensions[1] as f32;
                     let proj = cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 100.0);
                     let view = Matrix4::look_at(Point3::new(0.3, 0.3, 1.0), Point3::new(0.0, 0.0, 0.0), Vector3::new(0.0, -1.0, 0.0));
@@ -418,10 +417,6 @@ fn window_size_dependent_setup(
         ) as Arc<dyn FramebufferAbstract + Send + Sync>
     }).collect::<Vec<_>>();
 
-    // In the triangle example we use a dynamic viewport, as its a simple example.
-    // However in the teapot example, we recreate the pipelines with a hardcoded viewport instead.
-    // This allows the driver to optimize things, at the cost of slower window resizes.
-    // https://computergraphics.stackexchange.com/questions/5742/vulkan-best-way-of-updating-pipeline-viewport
     let pipeline = Arc::new(GraphicsPipeline::start()
         .vertex_input(TwoBuffersDefinition::<Vertex, Normal>::new())
         .vertex_shader(vs.main_entry_point(), ())
