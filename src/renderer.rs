@@ -121,6 +121,7 @@ impl Renderer {
         let planet_amount = objects.len() as u32;
 
         // Create a buffer for planet info
+        // Specify the type.
         let planet_buffer = Arc::new(CpuAccessibleBuffer::from_iter(self.get_device(), BufferUsage::all(), false, objects.iter()));
 
         // Create a compute shader for planet movement
@@ -240,7 +241,7 @@ impl Renderer {
 
                     let mut command_buffer = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
                         // Compute pipeline
-                        .dispatch([planet_amount, planet_amount, 0], compute_pipeline.clone(), compute_set.clone(), ()).unwrap()
+                        .dispatch([planet_amount, 0, 0], compute_pipeline.clone(), compute_set.clone(), ()).unwrap()
 
                         // Graphich pipeline
                         .begin_render_pass(

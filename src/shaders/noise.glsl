@@ -94,7 +94,9 @@ float noise(in vec3 p, in float seed) {
   [[unroll]]
   for (int i = 0; i < 4; ++i) {
     t = 0.6 - length(offset[i]);
+    // 0.6 - dot(offset[i], offset[i])
 
+    // Get out, multiply with max/min/clamp max(0, t)
     if (t > 0.0) {
       t *= t;
       n[i] = t * t * dot(g[i], offset[i]);

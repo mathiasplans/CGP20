@@ -21,7 +21,12 @@ layout(set = 0, binding = 0) uniform Data {
   float obliquity;
 } uniforms;
 
-layout(set = 0, binding = 1) 
+// layout(set = 0, binding = 1) uniform Planets {
+//     vec3 position;
+//     vec3 acceleration;
+//     float mass;
+//     float rad;
+// } planets;
 
 layout(location = 0) in vec3 interpolatedPosition;
 layout(location = 1) in vec3 interpolatedNormal;

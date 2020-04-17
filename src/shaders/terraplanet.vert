@@ -19,6 +19,17 @@ layout(set = 0, binding = 0) uniform Data {
   float obliquity;
 } uniforms;
 
+struct planet_struct {
+    vec3 pos;
+    vec3 acceleration;
+    float mass;
+    float rad;
+};
+
+// layout(set = 0, binding = 1) buffer Planet {
+//     planet_struct buf[];
+// } planet_positions;
+
 layout(location = 0) out vec3 interpolatedPosition;
 layout(location = 1) out vec3 interpolatedNormal;
 layout(location = 2) out vec3 interpolatedLocalPosition;
@@ -56,5 +67,5 @@ void main() {
     0.0, 0.0, 0.0, 1.0
   );
 
-  gl_Position = uniforms.projectionMatrix * uniforms.viewMatrix * uniforms.modelMatrix * terrainScale * vec4(position, 1.0);
+  gl_Position = uniforms.projectionMatrix * uniforms.viewMatrix * uniforms.modelMatrix * terrainScale * vec4(position + planet_positions.buf[0].pos, 1.0);
 }
