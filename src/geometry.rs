@@ -12,6 +12,14 @@ pub struct Normal {
     pub normal: Vector
 }
 
+#[derive(Default, Copy, Clone)]
+pub struct PlanetData {
+    pub position: Point,
+    pub acc_vector: Vector,
+    pub mass: f32,
+    pub rad: f32
+}
+
 vulkano::impl_vertex!(Vertex, position);
 vulkano::impl_vertex!(Normal, normal);
 

@@ -1,7 +1,6 @@
 use vulkano::buffer::cpu_pool::CpuBufferPool;
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState, CommandBuffer, AutoCommandBuffer};
-use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
 use vulkano::device::{Device, DeviceExtensions, QueuesIter, Queue};
 use vulkano::format::Format;
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, Subpass, RenderPassAbstract};
@@ -16,6 +15,13 @@ use vulkano::swapchain::{AcquireError, PresentMode, SurfaceTransform, Swapchain,
 use vulkano::swapchain;
 use vulkano::sync::{GpuFuture, FlushError};
 use vulkano::sync;
+
+use vulkano::pipeline::ComputePipeline;
+
+use vulkano::descriptor::descriptor_set::UnsafeDescriptorSetLayout;
+use vulkano::descriptor::descriptor_set::PersistentDescriptorSetBuf;
+use vulkano::descriptor::PipelineLayoutAbstract;
+use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, PersistentDescriptorSetBuilder};
 
 use vulkano_win::VkSurfaceBuild;
 use winit::window::{WindowBuilder, Window};
@@ -67,7 +73,10 @@ impl Renderer {
             q.supports_graphics() && surface.is_supported(q).unwrap_or(false)
         ).unwrap();
 
-        let device_ext = DeviceExtensions { khr_swapchain: true, .. DeviceExtensions::none() };
+        let device_ext = DeviceExtensions {
+            khr_swapchain: true,
+            khr_storage_buffer_storage_class: true,
+            .. DeviceExtensions::none() };
 
         let mut dev = Device::new(
             physical, physical.supported_features(), &device_ext, [(queue_family, 0.5)].iter().cloned()
@@ -107,7 +116,27 @@ impl Renderer {
         self.device.clone()
     }
 
-    pub fn start(self, objects: Vec<Icosphere>) {
+    pub fn start(self, objects: &'static Vec<Icosphere>) {
+        // Get the amount of planets
+        let planet_amount = objects.len() as u32;
+
+        // Create a buffer for planet info
+        let planet_buffer = Arc::new(CpuAccessibleBuffer::from_iter(self.get_device(), BufferUsage::all(), false, objects.iter()));
+
+        // Create a compute shader for planet movement
+        let movement_shader = cs::Shader::load(self.get_device())
+            .expect("failed to create shader module");
+
+        // Create a compute pipeline
+        let compute_pipeline = Arc::new(ComputePipeline::new(self.get_device(), &movement_shader.main_entry_point(), &())
+            .expect("failed to create compute pipeline"));
+
+        // Create a descriptor set for compute shader
+        let compute_set = Arc::new(PersistentDescriptorSet::start(compute_pipeline.clone().descriptor_set_layout(0).unwrap().clone())
+            .add_buffer(planet_buffer.clone().as_ref().as_ref().unwrap().clone()).unwrap()
+            .build().unwrap()
+        );
+
         let render_pass = Arc::new(
             vulkano::single_pass_renderpass!(self.device.clone(),
                 attachments: {
@@ -210,6 +239,10 @@ impl Renderer {
                     }
 
                     let mut command_buffer = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
+                        // Compute pipeline
+                        .dispatch([planet_amount, planet_amount, 0], compute_pipeline.clone(), compute_set.clone(), ()).unwrap()
+
+                        // Graphich pipeline
                         .begin_render_pass(
                             framebuffers[image_num].clone(), false,
                             vec![
@@ -218,16 +251,22 @@ impl Renderer {
                             ]
                         ).unwrap();
 
-                    for x in &objects {
+                    for x in objects {
                         let buffer = x.get_buffers();
                         let pipeline = x.get_pipeline(device.clone(), render_pass.clone());
-                        let descriptor_set = x.get_uniforms((*pipeline.descriptor_set_layout(0).unwrap()).clone());
+                        let uniforms = x.get_uniforms();
+
+
+                        let descriptor_set = PersistentDescriptorSet::start(pipeline.descriptor_set_layout(0).unwrap().clone())
+                            .add_buffer(uniforms).unwrap()
+                            // .add_buffer(planet_buffer.as_ref().as_ref().unwrap().clone()).unwrap()
+                            .build().unwrap();
 
                         command_buffer = command_buffer.draw_indexed(
                             pipeline.clone(),
                             &DynamicState::none(),
                             vec!(buffer.0.clone(), buffer.1.clone()),
-                            buffer.2.clone(), descriptor_set.clone(), ()
+                            buffer.2.clone(), descriptor_set, ()
                         ).unwrap();
                     }
 
@@ -256,5 +295,12 @@ impl Renderer {
                 _ => ()
             }
         });
+    }
+}
+
+mod cs {
+    vulkano_shaders::shader!{
+        ty: "compute",
+        path: "src/shaders/movement.comp"
     }
 }

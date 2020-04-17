@@ -7,7 +7,7 @@ use std::cmp;
 use vulkano::buffer::cpu_pool::CpuBufferPool;
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
-use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
+use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, PersistentDescriptorSetBuilder};
 use vulkano::device::{Device, DeviceExtensions};
 use vulkano::format::Format;
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, Subpass, RenderPassAbstract};
@@ -257,67 +257,52 @@ impl Icosphere {
         pipeline
     }
 
-    pub fn get_uniforms(&self, layout: Arc<UnsafeDescriptorSetLayout>) -> Arc<PersistentDescriptorSet<(
-        (),
-        PersistentDescriptorSetBuf<CpuBufferPoolSubbuffer<
-            vs::ty::Data,
-            Arc<StdMemoryPool>
-        >>
-    )>> {
-        let uniform_buffer_subbuffer = {
-            let elapsed = self.delta.elapsed();
-            let rotation = (elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0) / 5.0;
-            let rotation = Matrix4::from(Matrix3::from_angle_y(Rad(rotation as f32)));
+    pub fn get_uniforms(&self) -> Arc<CpuBufferPoolSubbuffer<vs::ty::Data, Arc<StdMemoryPool>>> {
+        let elapsed = self.delta.elapsed();
+        let rotation = (elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0) / 5.0;
+        let rotation = Matrix4::from(Matrix3::from_angle_y(Rad(rotation as f32)));
 
-            let translation = Matrix4::from_translation(self.translation);
-            
-            let aspect_ratio = 1024.0 / 768.0;
-            let proj = cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 100.0);
-            let view = Matrix4::look_at(Point3::new(0.0, 0.0, 0.0), Point3::new(0.0, 0.0, -10.0), Vector3::new(0.0, -1.0, 0.0));
-            let scale = Matrix4::from_scale(1.0);
+        let translation = Matrix4::from_translation(self.translation);
+        
+        let aspect_ratio = 1024.0 / 768.0;
+        let proj = cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 100.0);
+        let view = Matrix4::look_at(Point3::new(0.0, 0.0, 0.0), Point3::new(0.0, 0.0, -10.0), Vector3::new(0.0, -1.0, 0.0));
+        let scale = Matrix4::from_scale(1.0);
 
-            let model = translation * rotation * scale;
+        let model = translation * rotation * scale;
 
-            let colors = [
-                // Temperate
-                [0x19 as f32 / 255.0, 0x7b as f32 / 255.0, 0x30 as f32 / 255.0, 0.0],
-                [0.0, 0x58 as f32 / 255.0, 0x26 as f32 / 255.0, 0.0],
-                [1.0, 1.0, 1.0, 0.0],
+        let colors = [
+            // Temperate
+            [0x19 as f32 / 255.0, 0x7b as f32 / 255.0, 0x30 as f32 / 255.0, 0.0],
+            [0.0, 0x58 as f32 / 255.0, 0x26 as f32 / 255.0, 0.0],
+            [1.0, 1.0, 1.0, 0.0],
 
-                // Desert
-                [0xEF as f32 / 255.0, 0xDE as f32 / 255.0, 0xC2 as f32 / 255.0, 0.0],
-                [0xDA as f32 / 255.0, 0xC2 as f32 / 255.0, 0x72 as f32 / 255.0, 0.0],
-                [0xA8 as f32 / 255.0, 0x65 as f32 / 255.0, 0x1E as f32 / 255.0, 0.0]
-            ];
+            // Desert
+            [0xEF as f32 / 255.0, 0xDE as f32 / 255.0, 0xC2 as f32 / 255.0, 0.0],
+            [0xDA as f32 / 255.0, 0xC2 as f32 / 255.0, 0x72 as f32 / 255.0, 0.0],
+            [0xA8 as f32 / 255.0, 0x65 as f32 / 255.0, 0x1E as f32 / 255.0, 0.0]
+        ];
 
-            let uniform_data = vs::ty::Data {
-                _dummy0: [0, 0, 1, 0],
-                _dummy1: [0, 0, 0, 0],
-                _dummy2: [0, 0, 0, 0],
-                modelMatrix: model.into(),
-                viewMatrix: view.into(),
-                projectionMatrix: proj.into(),
-                viewPosition: Vector4::new(0.0, 0.0, 0.0, 0.0).into(),
+        let uniform_data = vs::ty::Data {
+            _dummy0: [0, 0, 1, 0],
+            _dummy1: [0, 0, 0, 0],
+            _dummy2: [0, 0, 0, 0],
+            modelMatrix: model.into(),
+            viewMatrix: view.into(),
+            projectionMatrix: proj.into(),
+            viewPosition: Vector4::new(0.0, 0.0, 0.0, 0.0).into(),
 
-                id: 11111,
-                seed: 0.65,
-                size: self.radius,
-                color: colors,
-                colorAtm: Vector3::new(0x66 as f32 / 255.0, 0xD5 as f32 / 255.0, 0xED as f32 / 255.0).into(),
-                colorWater: Vector3::new(0.0, 0xAE as f32 / 255.0, 0xEF as f32 / 255.0).into(),
-                colorDeepWater: Vector3::new(0x38 as f32 / 255.0, 0x3C as f32 / 255.0, 0x80 as f32 / 255.0).into(),
-                obliquity: 0.1
-            };
-
-            self.uniform_buffer.next(uniform_data).unwrap()
+            id: 111111,
+            seed: 0.65,
+            size: self.radius,
+            color: colors,
+            colorAtm: Vector3::new(0x66 as f32 / 255.0, 0xD5 as f32 / 255.0, 0xED as f32 / 255.0).into(),
+            colorWater: Vector3::new(0.0, 0xAE as f32 / 255.0, 0xEF as f32 / 255.0).into(),
+            colorDeepWater: Vector3::new(0x38 as f32 / 255.0, 0x3C as f32 / 255.0, 0x80 as f32 / 255.0).into(),
+            obliquity: 0.1
         };
 
-        let set = Arc::new(PersistentDescriptorSet::start(layout.clone())
-            .add_buffer(uniform_buffer_subbuffer).unwrap()
-            .build().unwrap()
-        );
-
-        set
+        Arc::new(self.uniform_buffer.next(uniform_data).unwrap())
     }
 
     pub fn set_translation(&mut self, tr: Vector3<f32>) {
