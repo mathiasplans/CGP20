@@ -250,6 +250,7 @@ impl Icosphere {
             .depth_stencil_simple_depth()
             .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
             .cull_mode_back()
+            .polygon_mode_fill() // can be _line for wireframe
             .build(device.clone())
             .unwrap());
 
@@ -298,7 +299,7 @@ impl Icosphere {
                 projectionMatrix: proj.into(),
                 viewPosition: Vector4::new(0.0, 0.0, 0.0, 0.0).into(),
 
-                id: 1112,
+                id: 11111,
                 seed: 0.65,
                 size: self.radius,
                 color: colors,

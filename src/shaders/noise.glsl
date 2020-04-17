@@ -1,6 +1,8 @@
 float F = 1.0 / 3.0;
 float G = 1.0 / 6.0;
 
+#extension GL_EXT_control_flow_attributes : require
+
 // Source: https://www.shadertoy.com/view/Xsl3Dl
 // Has been modified for our needs
 vec3 hash(ivec3 internal, ivec3 s, float seed) {
@@ -15,14 +17,15 @@ vec3 hash(ivec3 internal, ivec3 s, float seed) {
 }
 
 float noise(in vec3 p, in float seed) {
-  float sum = p.x + p.y + p.z;
-  float skewFactor = sum * F;
+  float strech = p.x + p.y + p.z;
 
-  // Skew
+  float skewFactor = strech * F;
+
+  // Place input coordinates on 
   ivec3 internal = ivec3(floor(p + skewFactor));
 
-  int unsum = internal.x + internal.y + internal.z;
-  float unskewFactor = float(unsum) * G;
+  int squish = internal.x + internal.y + internal.z;
+  float unskewFactor = float(squish) * G;
 
   // Unskew
   vec3 unskew = vec3(internal) - unskewFactor;
@@ -88,9 +91,9 @@ float noise(in vec3 p, in float seed) {
   float t = 0.0;
   float n[] = float[](0.0, 0.0, 0.0, 0.0);
 
+  [[unroll]]
   for (int i = 0; i < 4; ++i) {
-    tmp = pow(offset[i], vec3(2.0));
-    t = 0.5 - tmp.x - tmp.y - tmp.z;
+    t = 0.6 - length(offset[i]);
 
     if (t > 0.0) {
       t *= t;
