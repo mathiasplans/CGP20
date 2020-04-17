@@ -30,7 +30,7 @@ use vulkano::memory::pool::StdMemoryPool;
 
 
 use std::time::Instant;
-use cgmath::{Matrix3, Matrix4, Point3, Vector3, Rad};
+use cgmath::{Matrix3, Matrix4, Point3, Vector3, Vector4, Rad};
 
 use std::iter;
 
@@ -63,7 +63,7 @@ pub struct Icosphere {
 }
 
 impl Icosphere {
-    pub fn new(device: Arc<Device>, radius: f32, tessellation: u8) -> Self {
+    pub fn new(device: Arc<Device>, radius: f32, tessellation: u8, position: Vector3<f32>) -> Self {
         let mut is = Icosphere {
             device: device.clone(),
             index: 0,
@@ -82,10 +82,10 @@ impl Icosphere {
 
             delta: Instant::now(),
 
-            translation: Vector3::new(0.0, 0.0, 0.0),
+            translation: position,
 
             vertex_shader: vs::Shader::load(device.clone()).unwrap(),
-            fragment_shader: fs::Shader::load(device.clone()).unwrap()
+            fragment_shader: fs::Shader::load(device.clone()).unwrap(),
         };
 
         // First, create a icosahedron
@@ -114,29 +114,29 @@ impl Icosphere {
         // Create a vector for holding the faces
         let mut faces: Vec<geometry::Face> = Vec::new();
 
-        faces.push((0, 11, 5));
-        faces.push((0, 5, 1));
-        faces.push((0, 1, 7));
-        faces.push((0, 7, 10));
-        faces.push((0, 10, 11));
+        faces.push((5, 11, 0));
+        faces.push((1, 5, 0));
+        faces.push((7, 1, 0));
+        faces.push((10, 7, 0));
+        faces.push((11, 10, 0));
 
-        faces.push((1, 5, 9));
-        faces.push((5, 11, 4));
-        faces.push((11, 10, 2));
-        faces.push((10, 7, 6));
-        faces.push((7, 1, 8));
+        faces.push((9, 5, 1));
+        faces.push((4, 11, 5));
+        faces.push((2, 10, 11));
+        faces.push((6, 7, 10));
+        faces.push((8, 1, 7));
 
-        faces.push((3, 9, 4));
-        faces.push((3, 4, 2));
-        faces.push((3, 2, 6));
-        faces.push((3, 6, 8));
-        faces.push((3, 8, 9));
+        faces.push((4, 9, 3));
+        faces.push((2, 4, 3));
+        faces.push((6, 2, 3));
+        faces.push((8, 6, 3));
+        faces.push((9, 8, 3));
 
-        faces.push((4, 9, 5));
-        faces.push((2, 4, 11));
-        faces.push((6, 2, 10));
-        faces.push((8, 6, 7));
-        faces.push((9, 8, 1));
+        faces.push((5, 9, 4));
+        faces.push((11, 4, 2));
+        faces.push((10, 2, 6));
+        faces.push((7, 6, 8));
+        faces.push((1, 8, 9));
 
         // Tessellate the icosahedron to create icosphere
         for _i in 0..is.tessellation {
@@ -249,6 +249,7 @@ impl Icosphere {
             .fragment_shader(self.fragment_shader.main_entry_point(), ())
             .depth_stencil_simple_depth()
             .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
+            .cull_mode_back()
             .build(device.clone())
             .unwrap());
 
@@ -264,21 +265,47 @@ impl Icosphere {
     )>> {
         let uniform_buffer_subbuffer = {
             let elapsed = self.delta.elapsed();
-            let rotation = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0;
+            let rotation = (elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0) / 5.0;
             let rotation = Matrix4::from(Matrix3::from_angle_y(Rad(rotation as f32)));
 
             let translation = Matrix4::from_translation(self.translation);
             
             let aspect_ratio = 1024.0 / 768.0;
             let proj = cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 100.0);
-            let view = Matrix4::look_at(Point3::new(0.3, 0.3, 1.0), Point3::new(0.0, 0.0, 0.0), Vector3::new(0.0, -1.0, 0.0));
+            let view = Matrix4::look_at(Point3::new(0.0, 0.0, 0.0), Point3::new(0.0, 0.0, -10.0), Vector3::new(0.0, -1.0, 0.0));
             let scale = Matrix4::from_scale(1.0);
 
+            let model = translation * rotation * scale;
+
+            let colors = [
+                // Temperate
+                [0x19 as f32 / 255.0, 0x7b as f32 / 255.0, 0x30 as f32 / 255.0, 0.0],
+                [0.0, 0x58 as f32 / 255.0, 0x26 as f32 / 255.0, 0.0],
+                [1.0, 1.0, 1.0, 0.0],
+
+                // Desert
+                [0xEF as f32 / 255.0, 0xDE as f32 / 255.0, 0xC2 as f32 / 255.0, 0.0],
+                [0xDA as f32 / 255.0, 0xC2 as f32 / 255.0, 0x72 as f32 / 255.0, 0.0],
+                [0xA8 as f32 / 255.0, 0x65 as f32 / 255.0, 0x1E as f32 / 255.0, 0.0]
+            ];
+
             let uniform_data = vs::ty::Data {
-                world: (translation * rotation * scale).into(),
-                // world: (rotation).into(),
-                view: view.into(),
-                proj: proj.into(),
+                _dummy0: [0, 0, 1, 0],
+                _dummy1: [0, 0, 0, 0],
+                _dummy2: [0, 0, 0, 0],
+                modelMatrix: model.into(),
+                viewMatrix: view.into(),
+                projectionMatrix: proj.into(),
+                viewPosition: Vector4::new(0.0, 0.0, 0.0, 0.0).into(),
+
+                id: 1112,
+                seed: 0.65,
+                size: self.radius,
+                color: colors,
+                colorAtm: Vector3::new(0x66 as f32 / 255.0, 0xD5 as f32 / 255.0, 0xED as f32 / 255.0).into(),
+                colorWater: Vector3::new(0.0, 0xAE as f32 / 255.0, 0xEF as f32 / 255.0).into(),
+                colorDeepWater: Vector3::new(0x38 as f32 / 255.0, 0x3C as f32 / 255.0, 0x80 as f32 / 255.0).into(),
+                obliquity: 0.1
             };
 
             self.uniform_buffer.next(uniform_data).unwrap()
@@ -300,13 +327,15 @@ impl Icosphere {
 mod vs {
     vulkano_shaders::shader!{
         ty: "vertex",
-        path: "src/shaders/terra.vert"
+        include: ["src/shaders"],
+        path: "src/shaders/terraplanet.vert"
     }
 }
 
 mod fs {
     vulkano_shaders::shader!{
         ty: "fragment",
-        path: "src/shaders/terra.frag"
+        include: ["src/shaders"],
+        path: "src/shaders/terraplanet.frag"
     }
 }

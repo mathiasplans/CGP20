@@ -43,14 +43,14 @@ use icosphere::Icosphere;
 use renderer::Renderer;
 
 fn main() {
-    let mut r = renderer::Renderer::setup();
+    let r = renderer::Renderer::setup();
     let device = r.get_device();
 
-    let mut clunky = Icosphere::new(device.clone(), 0.5, 0);
-    clunky.set_translation(Vector3::new(0.45, 0.0, 0.0));
+    let mut clunky = Icosphere::new(device.clone(), 0.5, 0, Vector3::new(0.45, 0.0, -1.0));
+    // clunky.set_translation(Vector3::new(0.45, 0.0, 0.0));
 
-    let mut smooth = Icosphere::new(device.clone(), 0.4, 4);
-    smooth.set_translation(Vector3::new(-0.7, 0.0, 0.0));
+    let mut smooth = Icosphere::new(device.clone(), 0.4, 4, Vector3::new(-0.6, 0.0, -1.0));
+    // smooth.set_translation(Vector3::new(-0.7, 0.0, 0.0));
 
     let mut objects: Vec<Icosphere> = Vec::new();
     objects.push(clunky);
