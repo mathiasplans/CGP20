@@ -1,19 +1,27 @@
 #version 450
 
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 struct planet_struct {
     vec3 pos;
-    vec3 acceleration;
+    vec3 velocity;
     float mass;
     float rad;
 };
 
 layout(set = 0, binding = 0) buffer Data {
     planet_struct buf[];
-} buf;
+} planet_buffer;
+
+layout(push_constant) uniform PushConstantData {
+    float time;
+    float delta;
+    float circular;
+} pc;
 
 void main() {
     uint idx = gl_GlobalInvocationID.x;
-    buf.buf[idx.x].pos.y += 0.1;
+
+    // Update the position
+    planet_buffer.buf[idx].pos += planet_buffer.buf[idx].velocity * pc.delta * 10000.0;
 }

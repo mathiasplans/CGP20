@@ -116,25 +116,48 @@ impl Renderer {
         self.device.clone()
     }
 
+    pub fn get_planet_buffer(&self, objects: &'static Vec<Icosphere>) -> Arc<CpuAccessibleBuffer<[gravity_cs::ty::planet_struct]>> {
+        unsafe {
+            // CpuAccessibleBuffer::uninitialized_array(self.get_device(), planet_amount as usize, BufferUsage::all(), false).unwrap()
+            CpuAccessibleBuffer::from_iter(
+                self.device.clone(),
+                BufferUsage::all(),
+                false,
+                objects.into_iter().map(|x| {
+                    gravity_cs::ty::planet_struct {
+                        _dummy0: [0, 0, 0, 0],
+                        _dummy1: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        pos: x.get_position(),
+                        // pos: [0.0, 0.0, 0.0],
+                        velocity: [0.0, 0.0, 0.0],
+                        mass: x.get_mass(),
+                        rad: x.get_rad()
+                    }
+                })
+            ).unwrap()
+        }
+    }
+
     pub fn start(self, objects: &'static Vec<Icosphere>) {
         // Get the amount of planets
         let planet_amount = objects.len() as u32;
 
         // Create a buffer for planet info
         // Specify the type.
-        let planet_buffer = Arc::new(CpuAccessibleBuffer::from_iter(self.get_device(), BufferUsage::all(), false, objects.iter()));
+        let planet_buffer = self.get_planet_buffer(objects);
+        print!("{:?}\n",  planet_buffer.read().unwrap()[0].pos);
 
-        // Create a compute shader for planet movement
-        let movement_shader = cs::Shader::load(self.get_device())
+        // Create a compute shader for gravity
+        let gravity_shader = gravity_cs::Shader::load(self.get_device())
             .expect("failed to create shader module");
 
-        // Create a compute pipeline
-        let compute_pipeline = Arc::new(ComputePipeline::new(self.get_device(), &movement_shader.main_entry_point(), &())
+        // Create a compute pipeline for gravity
+        let gravity_pipeline = Arc::new(ComputePipeline::new(self.get_device(), &gravity_shader.main_entry_point(), &())
             .expect("failed to create compute pipeline"));
 
-        // Create a descriptor set for compute shader
-        let compute_set = Arc::new(PersistentDescriptorSet::start(compute_pipeline.clone().descriptor_set_layout(0).unwrap().clone())
-            .add_buffer(planet_buffer.clone().as_ref().as_ref().unwrap().clone()).unwrap()
+        // Create a descriptor set for gravity shader
+        let gravity_set = Arc::new(PersistentDescriptorSet::start(gravity_pipeline.clone().descriptor_set_layout(0).unwrap().clone())
+            .add_buffer(planet_buffer.clone()).unwrap()
             .build().unwrap()
         );
 
@@ -186,6 +209,14 @@ impl Renderer {
         let device = self.device.clone();
         let surface = self.surface.clone();
         let queue = self.queue.clone();
+
+        let mut compute_pc = gravity_cs::ty::PushConstantData {
+            time: 0.0,
+            delta: 0.0,
+            circular: 0.0
+        };
+
+        let compute_time = Instant::now();
 
         self.event_loop.run(move |event, _, control_flow| {
             match event {
@@ -239,9 +270,22 @@ impl Renderer {
                         recreate_swapchain = true;
                     }
 
+                    let elapsed = compute_time.elapsed();
+                    let last_time = compute_pc.time;
+                    compute_pc.time = elapsed.as_secs() as f32 + elapsed.subsec_nanos() as f32 / 1_000_000_000.0;
+                    compute_pc.delta = compute_pc.time - last_time;
+                    compute_pc.circular = compute_pc.time;
+
+                    // print!("{:?}\n", compute_pc.delta);
+
+                    if compute_pc.circular > 6.28318530718 {
+                        compute_pc.circular -= 6.28318530718;
+                    }
+
                     let mut command_buffer = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
                         // Compute pipeline
-                        .dispatch([planet_amount, 0, 0], compute_pipeline.clone(), compute_set.clone(), ()).unwrap()
+                        // Gravity
+                        .dispatch([planet_amount, 1, 1], gravity_pipeline.clone(), gravity_set.clone(), compute_pc).unwrap()
 
                         // Graphich pipeline
                         .begin_render_pass(
@@ -253,6 +297,7 @@ impl Renderer {
                         ).unwrap();
 
                     for x in objects {
+                        // println!("Position for {:?}: {:?}", x.get_id(), x.get_position());
                         let buffer = x.get_buffers();
                         let pipeline = x.get_pipeline(device.clone(), render_pass.clone());
                         let uniforms = x.get_uniforms();
@@ -260,18 +305,20 @@ impl Renderer {
 
                         let descriptor_set = PersistentDescriptorSet::start(pipeline.descriptor_set_layout(0).unwrap().clone())
                             .add_buffer(uniforms).unwrap()
-                            // .add_buffer(planet_buffer.as_ref().as_ref().unwrap().clone()).unwrap()
+                            .add_buffer(planet_buffer.clone()).unwrap()
                             .build().unwrap();
 
                         command_buffer = command_buffer.draw_indexed(
                             pipeline.clone(),
                             &DynamicState::none(),
                             vec!(buffer.0.clone(), buffer.1.clone()),
-                            buffer.2.clone(), descriptor_set, ()
+                            buffer.2.clone(), descriptor_set, planet_amount
                         ).unwrap();
                     }
 
-                    let command_buffer = command_buffer.end_render_pass().unwrap().build().unwrap();
+                    let command_buffer = command_buffer
+                        .end_render_pass().unwrap()
+                        .build().unwrap();
 
                     let future = previous_frame_end.take().unwrap()
                         .join(acquire_future)
@@ -279,7 +326,7 @@ impl Renderer {
                         .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
                         .then_signal_fence_and_flush();
 
-                    match future {
+                    match future  {
                         Ok(future) => {
                             previous_frame_end = Some(Box::new(future) as Box<_>);
                         },
@@ -299,9 +346,23 @@ impl Renderer {
     }
 }
 
-mod cs {
+fn distanceb(a: [f32; 3], b: [f32; 3]) -> f32 {
+    ((a[0] - b[0]).powf(2.0) + (a[1] - b[1]).powf(2.0) + (a[2] - b[2]).powf(2.0)).sqrt()
+}
+
+mod gravity_cs {
+    vulkano_shaders::shader!{
+        ty: "compute",
+        path: "src/shaders/gravity.comp"
+    }
+}
+
+mod movement_cs {
     vulkano_shaders::shader!{
         ty: "compute",
         path: "src/shaders/movement.comp"
     }
 }
+
+#[allow(dead_code)]
+const X: &str = include_str!("shaders/gravity.comp");

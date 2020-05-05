@@ -52,6 +52,8 @@ pub struct Icosphere {
     uniform_buffer: CpuBufferPool<vs::ty::Data>,
 
     radius: f32,
+    mass: f32,
+    id: u32,
     tessellation: u8,
 
     delta: Instant,
@@ -63,7 +65,7 @@ pub struct Icosphere {
 }
 
 impl Icosphere {
-    pub fn new(device: Arc<Device>, radius: f32, tessellation: u8, position: Vector3<f32>) -> Self {
+    pub fn new(device: Arc<Device>, radius: f32, mass: f32, tessellation: u8, position: Vector3<f32>, id: u32) -> Self {
         let mut is = Icosphere {
             device: device.clone(),
             index: 0,
@@ -78,6 +80,8 @@ impl Icosphere {
             uniform_buffer: CpuBufferPool::<vs::ty::Data>::new(device.clone(), BufferUsage::all()),
 
             radius: radius,
+            mass: mass,
+            id: id,
             tessellation: tessellation,
 
             delta: Instant::now(),
@@ -260,13 +264,15 @@ impl Icosphere {
     pub fn get_uniforms(&self) -> Arc<CpuBufferPoolSubbuffer<vs::ty::Data, Arc<StdMemoryPool>>> {
         let elapsed = self.delta.elapsed();
         let rotation = (elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0) / 5.0;
+        // let rotation = 0.0;
         let rotation = Matrix4::from(Matrix3::from_angle_y(Rad(rotation as f32)));
 
-        let translation = Matrix4::from_translation(self.translation);
+        let translation = Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0));
+        // let translation = Matrix4::from_translation(self.translation);
         
         let aspect_ratio = 1024.0 / 768.0;
         let proj = cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 100.0);
-        let view = Matrix4::look_at(Point3::new(0.0, 0.0, 0.0), Point3::new(0.0, 0.0, -10.0), Vector3::new(0.0, -1.0, 0.0));
+        let view = Matrix4::look_at(Point3::new(0.0, 0.0, 0.0), Point3::new(0.0, 0.0, -1000.0), Vector3::new(0.0, -1.0, 0.0));
         let scale = Matrix4::from_scale(1.0);
 
         let model = translation * rotation * scale;
@@ -292,7 +298,7 @@ impl Icosphere {
             projectionMatrix: proj.into(),
             viewPosition: Vector4::new(0.0, 0.0, 0.0, 0.0).into(),
 
-            id: 111111,
+            id: self.id,
             seed: 0.65,
             size: self.radius,
             color: colors,
@@ -305,8 +311,20 @@ impl Icosphere {
         Arc::new(self.uniform_buffer.next(uniform_data).unwrap())
     }
 
-    pub fn set_translation(&mut self, tr: Vector3<f32>) {
-        self.translation = tr;
+    pub fn get_position(&self) -> [f32; 3] {
+        [self.translation.x, self.translation.y, self.translation.z]
+    }
+
+    pub fn get_mass(&self) -> f32 {
+        self.mass
+    }
+
+    pub fn get_rad(&self) -> f32 {
+        self.radius
+    }
+
+    pub fn get_id(&self) -> u32 {
+        self.id
     }
 }
 
@@ -325,3 +343,12 @@ mod fs {
         path: "src/shaders/terraplanet.frag"
     }
 }
+
+#[allow(dead_code)]
+const X: &str = include_str!("shaders/terraplanet.vert");
+#[allow(dead_code)]
+const Y: &str = include_str!("shaders/terraplanet.frag");
+#[allow(dead_code)]
+const Z: &str = include_str!("shaders/lighting.glsl");
+#[allow(dead_code)]
+const A: &str = include_str!("shaders/noise.glsl");

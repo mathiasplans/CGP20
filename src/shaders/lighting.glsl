@@ -17,7 +17,7 @@ float orenNayar(in vec3 l, in vec3 n, in vec3 v, float r) {
 
   float ga = dot(v - n * nv, n - n * nl);
 
-  return max(0.0, nl) * (a + b * max(0.0, ga) * sqrt((1.0 - nv * nv) * (1.0 - nl * nl)) / max(nl, nv));
+  return max(0.0, nl) * (a + b * max(0.0, ga) * max(0.0, sqrt((1.0 - nv * nv) * (1.0 - nl * nl))) / max(nl, nv));
 }
 
 /**
@@ -94,23 +94,21 @@ float softShadow(vec3 lpos, float lsize, vec3 cpos, float csize, vec3 fpos) {
   return rapp;
 }
 
-float luminosity(sampler2D locations, int ideentity, int total, vec3 fragPosition, vec4 lposr) {
+float luminosity(uint identity, uint total, vec3 fragPosition, vec3 lpos, float lrad) {
   // Luminosity, get from texture
   float lum = 1.0;
   // vec4 cposr;
 
-  // // Bodies before self
-  // int i;
-  // for (i = 1; i < ideentity; ++i) {
-  //   cposr = texture2D(locations, vec2((float(i) + 0.5) / float(total), 0.5));
-  //   lum *= softShadow(lposr.xyz, lposr.w, cposr.xyz, cposr.w, fragPosition);
-  // }
+  // Bodies before self
+  uint i;
+  for (i = 1; i < identity; ++i) {
+    lum *= softShadow(lpos, lrad, planet_data.buf[i].pos, planet_data.buf[i].rad, fragPosition);
+  }
 
-  // // Bodies after self
-  // for (i = ideentity + 1; i < total; ++i) {
-  //   cposr = texture2D(locations, vec2((float(i) + 0.5) / float(total), 0.5));
-  //   lum *= softShadow(lposr.xyz, lposr.w, cposr.xyz, cposr.w, fragPosition);
-  // }
+  // Bodies after self
+  for (i = identity + 1; i < total; ++i) {
+    lum *= softShadow(lpos, lrad, planet_data.buf[i].pos, planet_data.buf[i].rad, fragPosition);
+  }
 
   return lum;
 }

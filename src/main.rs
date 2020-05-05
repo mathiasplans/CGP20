@@ -46,17 +46,18 @@ fn main() {
     let r = renderer::Renderer::setup();
     let device = r.get_device();
 
-    let clunky = Icosphere::new(device.clone(), 0.5, 0, Vector3::new(0.45, 0.0, -1.0));
-    // clunky.set_translation(Vector3::new(0.45, 0.0, 0.0));
-
-    let smooth = Icosphere::new(device.clone(), 0.4, 4, Vector3::new(-0.6, 0.0, -1.0));
-    // smooth.set_translation(Vector3::new(-0.7, 0.0, 0.0));
+    let s1 = Icosphere::new(device.clone(), 0.4, 10.0, 4, Vector3::new(0.0, 0.0, -4.0), 0);
+    let s2 = Icosphere::new(device.clone(), 0.5, 13.0, 4, Vector3::new(2.0, 1.0, -5.0), 1);
+    let s3 = Icosphere::new(device.clone(), 0.7, 17.0, 4, Vector3::new(-3.0, -3.0, -3.0), 2);
+    let s4 = Icosphere::new(device.clone(), 1.0, 25.0, 4, Vector3::new(3.0, -3.0, -5.0), 3);
 
     static mut objects: Vec<Icosphere> = Vec::new();
 
     unsafe {
-        objects.push(clunky);
-        objects.push(smooth);
+        objects.push(s1);
+        objects.push(s2);
+        objects.push(s3);
+        objects.push(s4);
         r.start(&objects);
     }
 }

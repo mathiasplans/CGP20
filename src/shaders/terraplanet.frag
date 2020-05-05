@@ -6,7 +6,7 @@ layout(set = 0, binding = 0) uniform Data {
   mat4 projectionMatrix;
   vec4 viewPosition;
 
-  int id;
+  uint id;
   float seed;
   float size;
   vec4 color[6];
@@ -21,12 +21,20 @@ layout(set = 0, binding = 0) uniform Data {
   float obliquity;
 } uniforms;
 
-// layout(set = 0, binding = 1) uniform Planets {
-//     vec3 position;
-//     vec3 acceleration;
-//     float mass;
-//     float rad;
-// } planets;
+struct planet_struct {
+    vec3 pos;
+    vec3 velocity;
+    float mass;
+    float rad;
+};
+
+layout(set = 0, binding = 1) buffer Planet {
+    planet_struct buf[];
+} planet_data;
+
+layout(push_constant) uniform PushConstantData {
+  uint nr_of_casters;
+} pc;
 
 layout(location = 0) in vec3 interpolatedPosition;
 layout(location = 1) in vec3 interpolatedNormal;
@@ -42,12 +50,11 @@ float shininess = 250.0;
 void main() {
   // Luminosity, get from texture
   // vec4 lposr = texture2D(locs, vec2(0.5 / float(bodycount), 0.5));
-  vec4 lposr = vec4(-3.0, 0.5, 10.0, 0.0);
+  vec3 lpos = vec3(0.0, 5.0, 10.0);
   // vec4 pposr = texture2D(locs, vec2((float(id) + 0.5) / float(bodycount), 0.5));
   vec4 pposr = vec4(0.0, 0.0, 0.0, uniforms.size);
 
-  // float lum = luminosity(locs, id, bodycount, interpolatedPosition, lposr);
-  float lum = 1.0;
+  float lum = luminosity(uniforms.id, pc.nr_of_casters, interpolatedPosition, lpos, 2.0);
 
   // Distance from light
   // float ldist = length(lposr.xyz - pposr.xyz);
@@ -70,10 +77,8 @@ void main() {
   f += 2.0 * fnoise(0.5 * normalPosition, uniforms.seed, 5, 0.7);
   // f = noise3(5.0 * interpolatedLocalPosition).x;
 
-  
-
   // Biomes
-  float height = interpolatedLocalPosition.y + fnoise(15.0 * normalPosition, uniforms.seed, 6, 0.45) + 3.0 * noise(1.5 * normalPosition, uniforms.seed);
+  float height = interpolatedPosition.y + fnoise(15.0 * normalPosition, uniforms.seed, 6, 0.45) + 3.0 * noise(1.5 * normalPosition, uniforms.seed);
   float theight = (height - uniforms.obliquity) / pposr.w;
   height / pposr.w;
 
@@ -83,10 +88,10 @@ void main() {
   vec3 n = normalize(interpolatedNormal);
 
   // 3. Find the direction towards the viewer, normalize.
-  vec3 v = normalize(uniforms.viewPosition.xyz - interpolatedLocalPosition);
+  vec3 v = normalize(uniforms.viewPosition.xyz - interpolatedPosition);
 
   // 4. Find the direction towards the light source, normalize.
-  vec3 l = normalize(lposr.xyz - interpolatedLocalPosition);
+  vec3 l = normalize(lpos - interpolatedPosition);
 
   // 5. Blinn: Find the half-angle vector h
   vec3 h = normalize(l + v);
@@ -158,6 +163,14 @@ void main() {
   vec3 interpolatedColor = lum * (noiseColor * diffuse + specular + glow);
 
   frag_color = vec4(interpolatedColor, 1.0);
-  //gl_FragColor = vec4(vec3(icecrack), 1.0);
-  // frag_color = vec4(1.0 * diffuse, 0.0, 0.0, 1.0);
+  // frag_color = vec4(vec3(diffuse), 1.0);
+
+  // if (diffuse <= 0.0)
+  //   frag_color = vec4(1.0, 0.0, 0.0, 1.0);
+
+  // if (isnan(diffuse))
+  //   frag_color = vec4(0.0, 1.0, 0.0, 1.0);
+
+  // if (isinf(diffuse))
+  //   frag_color = vec4(0.0, 0.0, 1.0, 1.0);
 }
