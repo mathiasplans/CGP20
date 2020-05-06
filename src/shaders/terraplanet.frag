@@ -26,8 +26,6 @@ struct planet_struct {
     vec3 velocity;
     float mass;
     float rad;
-    bool need_to_bounce;
-    vec3 bounce_normal;
 };
 
 layout(set = 0, binding = 1) buffer Planet {

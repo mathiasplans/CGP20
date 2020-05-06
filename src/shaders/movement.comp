@@ -6,6 +6,10 @@ struct planet_struct {
     vec3 velocity;
     float mass;
     float rad;
+};
+
+struct thread_result {
+    vec3 velocity;
     bool need_to_bounce;
     vec3 bounce_normal;
 };
@@ -38,7 +42,7 @@ layout(local_size_x = LOCAL_SIZE_X, local_size_y = 1, local_size_z = 1) in;
 #define G 0.3
 #define ACC_BOUNDRY 100.0
 
-shared planet_struct thread_data[gl_WorkGroupSize.x];
+shared thread_result thread_data[gl_WorkGroupSize.x];
 
 void main() {
     uint idx = gl_WorkGroupID.x;

@@ -127,14 +127,11 @@ impl Renderer {
                     print!("{:?}\n", x.get_position());
                     movement_cs::ty::planet_struct {
                         _dummy0: [0, 0, 0, 0],
-                        _dummy1: [0, 0, 0, 0, 0, 0, 0, 0],
-                        _dummy2: [0, 0, 0, 0],
+                        _dummy1: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                         pos: x.get_position(),
                         velocity: [0.0, 0.0, 0.0],
                         mass: x.get_mass(),
-                        rad: x.get_rad(),
-                        need_to_bounce: 0,
-                        bounce_normal: [0.0, 0.0, 0.0]
+                        rad: x.get_rad()
                     }
                 })
             ).unwrap()
