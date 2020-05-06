@@ -46,7 +46,7 @@ fn main() {
     let r = renderer::Renderer::setup();
     let device = r.get_device();
 
-    let s1 = Icosphere::new(device.clone(), 0.4, 10.0, 4, Vector3::new(0.0, 0.0, -4.0), 0);
+    let s1 = Icosphere::new(device.clone(), 0.4, 12.0, 4, Vector3::new(0.0, 5.0, -4.0), 0);
     let s2 = Icosphere::new(device.clone(), 0.5, 13.0, 4, Vector3::new(2.0, 1.0, -5.0), 1);
     let s3 = Icosphere::new(device.clone(), 0.7, 17.0, 4, Vector3::new(-3.0, -3.0, -3.0), 2);
     let s4 = Icosphere::new(device.clone(), 1.0, 25.0, 4, Vector3::new(3.0, -3.0, -5.0), 3);

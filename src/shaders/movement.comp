@@ -1,12 +1,13 @@
 #version 450
-
-layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+#extension GL_EXT_control_flow_attributes : require
 
 struct planet_struct {
     vec3 pos;
     vec3 velocity;
     float mass;
     float rad;
+    bool need_to_bounce;
+    vec3 bounce_normal;
 };
 
 layout(set = 0, binding = 0) buffer Data {
@@ -19,9 +20,91 @@ layout(push_constant) uniform PushConstantData {
     float circular;
 } pc;
 
-void main() {
-    uint idx = gl_GlobalInvocationID.x;
+// layout(constant_id = 1) const uint nr_of_threads = 1;
 
-    // Update the position
-    planet_buffer.buf[idx].pos += planet_buffer.buf[idx].velocity * pc.delta * 10000.0;
+// Set the workgroup size
+#define LOCAL_SIZE_X 4
+layout(local_size_x = LOCAL_SIZE_X, local_size_y = 1, local_size_z = 1) in;
+
+// TODO: Currently, using local_size_x_id will crash vulkano_shader macro shader!
+//       Someone has fixed this issue, but the pull request hasn't been approved and
+//       a new creat version isn't available. For now, have to set it manually -.-
+//      
+//       Issue link: https://github.com/vulkano-rs/vulkano/issues/1320
+
+// // Map the nr_of_threads to local_size_x
+// layout(local_size_x_id = 0) in;
+
+#define G 0.3
+#define ACC_BOUNDRY 100.0
+
+shared planet_struct thread_data[gl_WorkGroupSize.x];
+
+void main() {
+    uint idx = gl_WorkGroupID.x;
+    uint idy = gl_LocalInvocationID.x;
+
+    // Object and subject are the same. This branch will be invoked only once per object.
+    if (idx == idy) {
+        /* Firstly, we can do stuff that doesn't need thread_data from other threads. */
+        // Set thread_data to add-identity.
+        thread_data[idx].velocity = vec3(0.0);
+        thread_data[idx].need_to_bounce = false;
+        thread_data[idx].bounce_normal = vec3(0.0);
+
+        /* Secondly, we wait until thread_data is filled by all the other threads. */ 
+        barrier();
+
+        // Handle bouncing
+        bool need_to_bounce = false;
+        vec3 bounce_normal = vec3(0.0);
+
+        // Now we can add the results together
+        [[loop_unrolling]]
+        for (uint i = 0; i < gl_WorkGroupSize.x; ++i) {
+            planet_buffer.buf[idx].velocity -= thread_data[i].velocity;
+            need_to_bounce = thread_data[i].need_to_bounce || need_to_bounce;
+            bounce_normal += thread_data[i].bounce_normal;
+        }
+
+        // Bouncing
+        if (need_to_bounce)
+            planet_buffer.buf[idx].velocity = reflect(planet_buffer.buf[idx].velocity, normalize(bounce_normal));
+
+        // Update the position
+        planet_buffer.buf[idx].pos += planet_buffer.buf[idx].velocity * pc.delta;
+    }
+
+    // Object and subject are not the same, we can calculate interactions between them.
+    else {
+        // Vector from subject to object
+        vec3 movement_dir = planet_buffer.buf[idx].pos - planet_buffer.buf[idy].pos;
+
+        // Get the distance between bodies
+        float dst = length(movement_dir);
+
+        // Normalize the direction
+        movement_dir = normalize(movement_dir);
+
+        // Calculate the force of gravity and acceleration.
+        vec3 acceleration = clamp(movement_dir * G * planet_buffer.buf[idy].mass / (dst * dst), vec3(-ACC_BOUNDRY), vec3(ACC_BOUNDRY));
+
+        bool bounce = dst <= planet_buffer.buf[idx].rad + planet_buffer.buf[idy].rad;
+
+        thread_data[idy].velocity = acceleration * pc.delta;
+
+        // Check for bouncing
+        if (bounce) {
+            thread_data[idy].need_to_bounce = true;
+            thread_data[idy].bounce_normal = -movement_dir * planet_buffer.buf[idx].mass;
+        }
+
+        else {
+            thread_data[idy].need_to_bounce = false;
+            thread_data[idy].bounce_normal = vec3(0.0);
+        }
+
+        memoryBarrier();
+        barrier();
+    }
 }

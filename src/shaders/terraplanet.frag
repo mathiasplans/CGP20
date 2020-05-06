@@ -26,6 +26,8 @@ struct planet_struct {
     vec3 velocity;
     float mass;
     float rad;
+    bool need_to_bounce;
+    vec3 bounce_normal;
 };
 
 layout(set = 0, binding = 1) buffer Planet {
@@ -50,7 +52,7 @@ float shininess = 250.0;
 void main() {
   // Luminosity, get from texture
   // vec4 lposr = texture2D(locs, vec2(0.5 / float(bodycount), 0.5));
-  vec3 lpos = vec3(0.0, 5.0, 10.0);
+  vec3 lpos = 20.0 * vec3(0.0, 5.0, 10.0);
   // vec4 pposr = texture2D(locs, vec2((float(id) + 0.5) / float(bodycount), 0.5));
   vec4 pposr = vec4(0.0, 0.0, 0.0, uniforms.size);
 

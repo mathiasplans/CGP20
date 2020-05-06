@@ -264,18 +264,14 @@ impl Icosphere {
     pub fn get_uniforms(&self) -> Arc<CpuBufferPoolSubbuffer<vs::ty::Data, Arc<StdMemoryPool>>> {
         let elapsed = self.delta.elapsed();
         let rotation = (elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0) / 5.0;
-        // let rotation = 0.0;
         let rotation = Matrix4::from(Matrix3::from_angle_y(Rad(rotation as f32)));
-
-        let translation = Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0));
-        // let translation = Matrix4::from_translation(self.translation);
         
         let aspect_ratio = 1024.0 / 768.0;
-        let proj = cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 100.0);
+        let proj = cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 1000.0);
         let view = Matrix4::look_at(Point3::new(0.0, 0.0, 0.0), Point3::new(0.0, 0.0, -1000.0), Vector3::new(0.0, -1.0, 0.0));
         let scale = Matrix4::from_scale(1.0);
 
-        let model = translation * rotation * scale;
+        let model = rotation * scale;
 
         let colors = [
             // Temperate
