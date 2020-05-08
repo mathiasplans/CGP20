@@ -62,10 +62,12 @@ pub struct Icosphere {
 
     vertex_shader: vs::Shader,
     fragment_shader: fs::Shader,
+
+    seed: f32
 }
 
 impl Icosphere {
-    pub fn new(device: Arc<Device>, radius: f32, mass: f32, tessellation: u8, position: Vector3<f32>, id: u32) -> Self {
+    pub fn new(device: Arc<Device>, radius: f32, mass: f32, tessellation: u8, position: Vector3<f32>, id: u32, seed: f32) -> Self {
         let mut is = Icosphere {
             device: device.clone(),
             index: 0,
@@ -90,6 +92,8 @@ impl Icosphere {
 
             vertex_shader: vs::Shader::load(device.clone()).unwrap(),
             fragment_shader: fs::Shader::load(device.clone()).unwrap(),
+
+            seed: seed
         };
 
         // First, create a icosahedron
@@ -262,16 +266,11 @@ impl Icosphere {
     }
 
     pub fn get_uniforms(&self) -> Arc<CpuBufferPoolSubbuffer<vs::ty::Data, Arc<StdMemoryPool>>> {
-        let elapsed = self.delta.elapsed();
-        let rotation = (elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0) / 5.0;
-        let rotation = Matrix4::from(Matrix3::from_angle_y(Rad(rotation as f32)));
+        // let elapsed = self.delta.elapsed();
         
         let aspect_ratio = 1024.0 / 768.0;
         let proj = cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 1000.0);
         let view = Matrix4::look_at(Point3::new(0.0, 0.0, 0.0), Point3::new(0.0, 0.0, -1000.0), Vector3::new(0.0, -1.0, 0.0));
-        let scale = Matrix4::from_scale(1.0);
-
-        let model = rotation * scale;
 
         let colors = [
             // Temperate
@@ -289,13 +288,12 @@ impl Icosphere {
             _dummy0: [0, 0, 1, 0],
             _dummy1: [0, 0, 0, 0],
             _dummy2: [0, 0, 0, 0],
-            modelMatrix: model.into(),
             viewMatrix: view.into(),
             projectionMatrix: proj.into(),
             viewPosition: Vector4::new(0.0, 0.0, 0.0, 0.0).into(),
 
             id: self.id,
-            seed: 0.65,
+            seed: self.seed,
             size: self.radius,
             color: colors,
             colorAtm: Vector3::new(0x66 as f32 / 255.0, 0xD5 as f32 / 255.0, 0xED as f32 / 255.0).into(),

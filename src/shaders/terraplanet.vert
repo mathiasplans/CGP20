@@ -4,7 +4,6 @@ layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 
 layout(set = 0, binding = 0) uniform Data {
-  mat4 modelMatrix;
   mat4 viewMatrix;
   mat4 projectionMatrix;
   vec4 viewPosition;
@@ -19,12 +18,7 @@ layout(set = 0, binding = 0) uniform Data {
   float obliquity;
 } uniforms;
 
-struct planet_struct {
-    vec3 pos;
-    vec3 velocity;
-    float mass;
-    float rad;
-};
+#include <types.glsl>
 
 layout(set = 0, binding = 1) buffer Planet {
     planet_struct buf[];
@@ -37,23 +31,23 @@ layout(location = 2) out vec3 interpolatedLocalPosition;
 #include <noise.glsl>
 
 void main() {
-  // Get the position in worldspace
-  vec3 grav_position = planet_positions.buf[uniforms.id].pos;
+  // // Get the position in worldspace
+  // vec3 grav_position = planet_positions.buf[uniforms.id].pos;
 
-  mat4 gravityTranslation = mat4(0.0);
+  // mat4 gravityTranslation = mat4(0.0);
 
-  gravityTranslation[0][0] = 1.0;
-  gravityTranslation[1][1] = 1.0;
-  gravityTranslation[2][2] = 1.0;
+  // gravityTranslation[0][0] = 1.0;
+  // gravityTranslation[1][1] = 1.0;
+  // gravityTranslation[2][2] = 1.0;
 
-  gravityTranslation[3] = vec4(grav_position, 1.0);
+  // gravityTranslation[3] = vec4(grav_position, 1.0);
 
-  // Construct a real model matrix
-  mat4 realmodel = gravityTranslation * uniforms.modelMatrix;
+  // // Construct a real model matrix
+  // mat4 realmodel = gravityTranslation * uniforms.modelMatrix;
 
   // In world-space
-  interpolatedPosition = (realmodel * vec4(position, 1.0)).xyz;
-  interpolatedNormal = normalize(mat3(transpose(inverse(realmodel))) * normal).xyz;
+  interpolatedPosition = (planet_positions.buf[uniforms.id].modelMatrix * vec4(position, 1.0)).xyz;
+  interpolatedNormal = normalize(mat3(transpose(inverse(planet_positions.buf[uniforms.id].modelMatrix))) * normal).xyz;
 
   // In object-space
   interpolatedLocalPosition = position;
@@ -85,5 +79,5 @@ void main() {
   );
 
 
-  gl_Position = uniforms.projectionMatrix * uniforms.viewMatrix * realmodel * terrainScale * vec4(position, 1.0);
+  gl_Position = uniforms.projectionMatrix * uniforms.viewMatrix * planet_positions.buf[uniforms.id].modelMatrix * terrainScale * vec4(position, 1.0);
 }

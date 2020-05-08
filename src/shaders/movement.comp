@@ -1,12 +1,7 @@
 #version 450
 #extension GL_EXT_control_flow_attributes : require
 
-struct planet_struct {
-    vec3 pos;
-    vec3 velocity;
-    float mass;
-    float rad;
-};
+#include <types.glsl>
 
 struct thread_result {
     vec3 velocity;
@@ -77,6 +72,45 @@ void main() {
 
         // Update the position
         planet_buffer.buf[idx].pos += planet_buffer.buf[idx].velocity * pc.delta;
+
+        // Update the rotation
+        planet_buffer.buf[idx].rotation += planet_buffer.buf[idx].rotationRate * pc.delta;
+        vec3 rot = planet_buffer.buf[idx].rotation;
+
+        // Rotation matrix. Remember, GLSL matrices are column-major!
+        mat4 rotationMatrix = mat4(0.0);
+        rotationMatrix[3][3] = 1.0;
+
+        rotationMatrix[0] = vec4(
+            cos(rot.x) * cos(rot.y), 
+            sin(rot.x) * cos(rot.y), 
+            -sin(rot.y), 
+            0.0
+        );
+
+        rotationMatrix[1] = vec4(
+            cos(rot.x) * sin(rot.y) * sin(rot.z) - sin(rot.x) * cos(rot.z),
+            sin(rot.x) * sin(rot.y) * sin(rot.z) + cos(rot.x) * cos(rot.z),
+            cos(rot.y) * sin(rot.z),
+            0.0    
+        );
+
+        rotationMatrix[2] = vec4(
+            cos(rot.x) * sin(rot.y) * cos(rot.z) + sin(rot.x) * sin(rot.z),
+            sin(rot.x) * sin(rot.y) * cos(rot.z) - cos(rot.x) * sin(rot.z),
+            cos(rot.y) * cos(rot.z),
+            0.0
+        );
+
+        // Translation matrix
+        mat4 translationMatrix = mat4(0.0);
+        translationMatrix[0][0] = 1.0;
+        translationMatrix[1][1] = 1.0;
+        translationMatrix[2][2] = 1.0;
+        translationMatrix[3] = vec4(planet_buffer.buf[idx].pos, 1.0);
+
+        // Construct a modelMatrix
+        planet_buffer.buf[idx].modelMatrix = translationMatrix * rotationMatrix;
     }
 
     // Object and subject are not the same, we can calculate interactions between them.

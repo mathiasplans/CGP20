@@ -1,7 +1,6 @@
 #version 450
 
 layout(set = 0, binding = 0) uniform Data {
-  mat4 modelMatrix;
   mat4 viewMatrix;
   mat4 projectionMatrix;
   vec4 viewPosition;
@@ -21,12 +20,7 @@ layout(set = 0, binding = 0) uniform Data {
   float obliquity;
 } uniforms;
 
-struct planet_struct {
-    vec3 pos;
-    vec3 velocity;
-    float mass;
-    float rad;
-};
+#include <types.glsl>
 
 layout(set = 0, binding = 1) buffer Planet {
     planet_struct buf[];

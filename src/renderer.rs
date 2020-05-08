@@ -127,11 +127,20 @@ impl Renderer {
                     print!("{:?}\n", x.get_position());
                     movement_cs::ty::planet_struct {
                         _dummy0: [0, 0, 0, 0],
-                        _dummy1: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        _dummy1: [0, 0, 0, 0],
                         pos: x.get_position(),
                         velocity: [0.0, 0.0, 0.0],
                         mass: x.get_mass(),
-                        rad: x.get_rad()
+                        rad: x.get_rad(),
+                        rotation: [0.0, 0.0, 0.0],
+                        // rotationRate: [3.0, 0.5, 1.0],
+                        rotationRate: [0.0, 0.0, 0.0],
+                        modelMatrix: [
+                            [0.0, 0.0, 0.0, 0.0], 
+                            [0.0, 0.0, 0.0, 0.0], 
+                            [0.0, 0.0, 0.0, 0.0], 
+                            [0.0, 0.0, 0.0, 0.0]
+                        ]
                     }
                 })
             ).unwrap()
@@ -359,6 +368,7 @@ fn distanceb(a: [f32; 3], b: [f32; 3]) -> f32 {
 mod movement_cs {
     vulkano_shaders::shader!{
         ty: "compute",
+        include: ["src/shaders"],
         path: "src/shaders/movement.comp"
     }
 }
