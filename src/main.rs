@@ -68,7 +68,7 @@ fn main() {
     // ID generator
     let mut id = IDGenerator::new();
 
-    // RNG. Seed is byte array [u8; N]
+    // RNG
     let mut rng = StdRng::seed_from_u64(10100);
 
     let s1 = Icosphere::new(device.clone(), 0.4, 12.0, 4, Vector3::new(0.0, 5.0, -4.0), id.get(), rng.gen());
