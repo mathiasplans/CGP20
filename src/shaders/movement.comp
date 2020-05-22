@@ -22,13 +22,13 @@ layout(push_constant) uniform PushConstantData {
 // layout(constant_id = 1) const uint nr_of_threads = 1;
 
 // Set the workgroup size
-#define LOCAL_SIZE_X 4
+#define LOCAL_SIZE_X 128
 layout(local_size_x = LOCAL_SIZE_X, local_size_y = 1, local_size_z = 1) in;
 
 // TODO: Currently, using local_size_x_id will crash vulkano_shader macro shader!
 //       Someone has fixed this issue, but the pull request hasn't been approved and
 //       a new creat version isn't available. For now, have to set it manually -.-
-//      
+//
 //       Issue link: https://github.com/vulkano-rs/vulkano/issues/1320
 
 // // Map the nr_of_threads to local_size_x
@@ -43,15 +43,19 @@ void main() {
     uint idx = gl_WorkGroupID.x;
     uint idy = gl_LocalInvocationID.x;
 
+    // Non-exist
+    if (idy >= gl_WorkGroupSize.x)
+        barrier();
+
     // Object and subject are the same. This branch will be invoked only once per object.
-    if (idx == idy) {
+    else if (idx == idy) {
         /* Firstly, we can do stuff that doesn't need thread_data from other threads. */
         // Set thread_data to add-identity.
         thread_data[idx].velocity = vec3(0.0);
         thread_data[idx].need_to_bounce = false;
         thread_data[idx].bounce_normal = vec3(0.0);
 
-        /* Secondly, we wait until thread_data is filled by all the other threads. */ 
+        /* Secondly, we wait until thread_data is filled by all the other threads. */
         barrier();
 
         // Handle bouncing
@@ -82,9 +86,9 @@ void main() {
         rotationMatrix[3][3] = 1.0;
 
         rotationMatrix[0] = vec4(
-            cos(rot.x) * cos(rot.y), 
-            sin(rot.x) * cos(rot.y), 
-            -sin(rot.y), 
+            cos(rot.x) * cos(rot.y),
+            sin(rot.x) * cos(rot.y),
+            -sin(rot.y),
             0.0
         );
 
@@ -92,7 +96,7 @@ void main() {
             cos(rot.x) * sin(rot.y) * sin(rot.z) - sin(rot.x) * cos(rot.z),
             sin(rot.x) * sin(rot.y) * sin(rot.z) + cos(rot.x) * cos(rot.z),
             cos(rot.y) * sin(rot.z),
-            0.0    
+            0.0
         );
 
         rotationMatrix[2] = vec4(

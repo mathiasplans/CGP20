@@ -3,7 +3,7 @@
 layout(set = 0, binding = 0) uniform Data {
   mat4 viewMatrix;
   mat4 projectionMatrix;
-  vec4 viewPosition;
+  vec3 viewPosition;
 
   uint id;
   float seed;
@@ -38,16 +38,12 @@ float shininess = 250.0;
 
 void main() {
   // Luminosity, get from texture
-  // vec4 lposr = texture2D(locs, vec2(0.5 / float(bodycount), 0.5));
-  vec3 lpos = 20.0 * vec3(0.0, 5.0, 10.0);
-  // vec4 pposr = texture2D(locs, vec2((float(id) + 0.5) / float(bodycount), 0.5));
-  vec4 pposr = vec4(0.0, 0.0, 0.0, uniforms.size);
-
-  float lum = luminosity(uniforms.id, pc.nr_of_casters, interpolatedPosition, lpos, 2.0);
+  vec3 lpos = planet_data.buf[0].pos;
+  float lum = luminosity(uniforms.id, pc.nr_of_casters, interpolatedPosition);
 
   // Distance from light
   // float ldist = length(lposr.xyz - pposr.xyz);
-  float ldist = 10.0;
+  float ldist = length(lpos - planet_data.buf[uniforms.id].pos);
 
   // Normalized local position
   // vec3 normalPosition = interpolatedLocalPosition / pposr.w;
@@ -68,8 +64,7 @@ void main() {
 
   // Biomes
   float height = interpolatedPosition.y + fnoise(15.0 * normalPosition, uniforms.seed, 6, 0.45) + 3.0 * noise(1.5 * normalPosition, uniforms.seed);
-  float theight = (height - uniforms.obliquity) / pposr.w;
-  height / pposr.w;
+  float theight = (height - uniforms.obliquity) / uniforms.size;
 
   float iciness = abs(theight) + max(f, 0.005) * ldist / 800.0 + ldist / 6400.0;
 

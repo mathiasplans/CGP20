@@ -94,7 +94,7 @@ float softShadow(vec3 lpos, float lsize, vec3 cpos, float csize, vec3 fpos) {
   return rapp;
 }
 
-float luminosity(uint identity, uint total, vec3 fragPosition, vec3 lpos, float lrad) {
+float luminosity(uint identity, uint total, vec3 fragPosition) {
   // Luminosity, get from texture
   float lum = 1.0;
   // vec4 cposr;
@@ -102,12 +102,12 @@ float luminosity(uint identity, uint total, vec3 fragPosition, vec3 lpos, float 
   // Bodies before self
   uint i;
   for (i = 1; i < identity; ++i) {
-    lum *= softShadow(lpos, lrad, planet_data.buf[i].pos, planet_data.buf[i].rad, fragPosition);
+    lum *= softShadow(planet_data.buf[0].pos, planet_data.buf[0].rad, planet_data.buf[i].pos, planet_data.buf[i].rad, fragPosition);
   }
 
   // Bodies after self
   for (i = identity + 1; i < total; ++i) {
-    lum *= softShadow(lpos, lrad, planet_data.buf[i].pos, planet_data.buf[i].rad, fragPosition);
+    lum *= softShadow(planet_data.buf[0].pos, planet_data.buf[0].rad, planet_data.buf[i].pos, planet_data.buf[i].rad, fragPosition);
   }
 
   return lum;

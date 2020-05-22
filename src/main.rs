@@ -36,53 +36,40 @@ use std::time::Instant;
 use std::collections::HashMap;
 use std::cmp;
 
-use rand::{Rng, SeedableRng, rngs::StdRng};
-
-#[path = "icosphere.rs"] mod icosphere;
-#[path = "renderer.rs"] mod renderer;
+pub mod icosphere;
+pub mod renderer;
+pub mod geometry;
+pub mod terraplanet;
+pub mod color;
+pub mod sun;
+pub mod camera;
+pub mod initconf;
+pub mod idgen;
 
 use icosphere::Icosphere;
 use renderer::Renderer;
+use terraplanet::TerraPlanet;
+use sun::Sun;
+use initconf::random_config;
 
-struct IDGenerator {
-    id: u32,
-}
-
-impl IDGenerator {
-    pub fn new() -> Self {
-        IDGenerator {
-            id: 0
-        }
-    }
-
-    pub fn get(&mut self) -> u32 {
-        self.id = self.id + 1;
-        self.id - 1
-    }
-}
 
 fn main() {
-    let r = renderer::Renderer::setup();
+    let r = Renderer::setup();
     let device = r.get_device();
 
-    // ID generator
-    let mut id = IDGenerator::new();
+    let c = random_config(device, 12);
 
-    // RNG
-    let mut rng = StdRng::seed_from_u64(10100);
-
-    let s1 = Icosphere::new(device.clone(), 0.4, 12.0, 4, Vector3::new(0.0, 5.0, -4.0), id.get(), rng.gen());
-    let s2 = Icosphere::new(device.clone(), 0.5, 13.0, 4, Vector3::new(2.0, 1.0, -5.0), id.get(), rng.gen());
-    let s3 = Icosphere::new(device.clone(), 0.7, 17.0, 4, Vector3::new(-3.0, -3.0, -3.0), id.get(), rng.gen());
-    let s4 = Icosphere::new(device.clone(), 1.0, 25.0, 4, Vector3::new(3.0, -3.0, -5.0), id.get(), rng.gen());
-
-    static mut objects: Vec<Icosphere> = Vec::new();
+    static mut SUNS: Vec<Sun> = Vec::new();
+    static mut TERRAPLANETS: Vec<TerraPlanet> = Vec::new();
 
     unsafe {
-        objects.push(s1);
-        objects.push(s2);
-        objects.push(s3);
-        objects.push(s4);
-        r.start(&objects);
+        for a in c.0 {
+            SUNS.push(a);
+        }
+
+        for a in c.1 {
+            TERRAPLANETS.push(a);
+        }
+        r.start(&SUNS, &TERRAPLANETS);
     }
 }

@@ -34,66 +34,36 @@ use cgmath::{Matrix3, Matrix4, Point3, Vector3, Vector4, Rad};
 
 use std::iter;
 
-#[path = "geometry.rs"] mod geometry;
-use geometry::{Vertex, Normal, Point, Vector, Face};
+// #[path = "geometry.rs"] mod geometry;
+use crate::geometry::{Vertex, Normal, Point, Vector, Face};
 
 // Inspired by http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html
 pub struct Icosphere {
-    device: Arc<Device>,
     index: u16,
-    vertex_vector: Vec<geometry::Vertex>,
-    normal_vector: Vec<geometry::Normal>,
+    vertex_vector: Vec<Vertex>,
+    normal_vector: Vec<Normal>,
     index_vector: Vec<u16>,
     middle_vertex: HashMap<u32, u16>,
 
-    vertex_buffer: Option<Arc<CpuAccessibleBuffer<[geometry::Vertex]>>>,
-    normal_buffer: Option<Arc<CpuAccessibleBuffer<[geometry::Normal]>>>,
-    index_buffer: Option<Arc<CpuAccessibleBuffer<[u16]>>>,
-    uniform_buffer: CpuBufferPool<vs::ty::Data>,
-
     radius: f32,
-    mass: f32,
-    id: u32,
     tessellation: u8,
-
-    delta: Instant,
-
-    translation: Vector3<f32>,
-
-    vertex_shader: vs::Shader,
-    fragment_shader: fs::Shader,
-
-    seed: f32
 }
 
 impl Icosphere {
-    pub fn new(device: Arc<Device>, radius: f32, mass: f32, tessellation: u8, position: Vector3<f32>, id: u32, seed: f32) -> Self {
+    pub fn get_vectors(self) -> (Vec<Vertex>, Vec<Normal>, Vec<u16>) {
+        (self.vertex_vector, self.normal_vector, self.index_vector)
+    }
+
+    pub fn new(radius: f32, tessellation: u8) -> Self {
         let mut is = Icosphere {
-            device: device.clone(),
             index: 0,
             vertex_vector: Vec::new(),
             normal_vector: Vec::new(),
             index_vector: Vec::new(),
             middle_vertex: HashMap::new(),
 
-            vertex_buffer: None,
-            normal_buffer: None,
-            index_buffer: None,
-            uniform_buffer: CpuBufferPool::<vs::ty::Data>::new(device.clone(), BufferUsage::all()),
-
             radius: radius,
-            mass: mass,
-            id: id,
-            tessellation: tessellation,
-
-            delta: Instant::now(),
-
-            translation: position,
-
-            vertex_shader: vs::Shader::load(device.clone()).unwrap(),
-            fragment_shader: fs::Shader::load(device.clone()).unwrap(),
-
-            seed: seed
+            tessellation: tessellation
         };
 
         // First, create a icosahedron
@@ -120,7 +90,7 @@ impl Icosphere {
         is.add_vertex((-t, 0.0,  1.0));
 
         // Create a vector for holding the faces
-        let mut faces: Vec<geometry::Face> = Vec::new();
+        let mut faces: Vec<Face> = Vec::new();
 
         faces.push((5, 11, 0));
         faces.push((1, 5, 0));
@@ -148,7 +118,7 @@ impl Icosphere {
 
         // Tessellate the icosahedron to create icosphere
         for _i in 0..is.tessellation {
-            let mut newfaces: Vec<geometry::Face> = Vec::new();
+            let mut newfaces: Vec<Face> = Vec::new();
 
             faces.iter().for_each(|x| {
                 // Triangulate the triangle
@@ -172,13 +142,10 @@ impl Icosphere {
             is.index_vector.push(x.2);
         });
 
-        // Create buffers
-        is.build_buffers();
-
         is
     }
 
-    fn add_vertex(&mut self, point: geometry::Point) -> u16 {
+    fn add_vertex(&mut self, point: Point) -> u16 {
         // normalize
         let rad = self.radius;
         let pointarray = [point.0, point.1, point.2];
@@ -187,12 +154,12 @@ impl Icosphere {
 
         // Create a normal
         let normal = (normalized.next().unwrap(), normalized.next().unwrap(), normalized.next().unwrap());
-        self.normal_vector.push(geometry::Normal {
+        self.normal_vector.push(Normal {
             normal: normal
         });
 
         // Add to vertex_buffer
-        self.vertex_vector.push(geometry::Vertex {
+        self.vertex_vector.push(Vertex {
             position: (normal.0 * rad, normal.1 * rad, normal.2 * rad)
         });
 
@@ -217,132 +184,17 @@ impl Icosphere {
         else {
             let v1 = self.vertex_vector[usize::from(p1)];
             let v2 = self.vertex_vector[usize::from(p2)];
-            
+
             let newindex = self.add_vertex((
-                (v1.position.0 + v2.position.0) / 2.0, 
-                (v1.position.1 + v2.position.1) / 2.0, 
+                (v1.position.0 + v2.position.0) / 2.0,
+                (v1.position.1 + v2.position.1) / 2.0,
                 (v1.position.2 + v2.position.2) / 2.0
             ));
 
             // Add it to the cache
             self.middle_vertex.insert(key, newindex);
-            
+
             newindex
         }
     }
-
-    pub fn build_buffers(&mut self) -> (Arc<CpuAccessibleBuffer<[geometry::Vertex]>>, Arc<CpuAccessibleBuffer<[geometry::Normal]>>, Arc<CpuAccessibleBuffer<[u16]>>) {
-        self.vertex_buffer = Some(CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::vertex_buffer(), false, self.vertex_vector.iter().cloned()).unwrap());
-        self.normal_buffer = Some(CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::vertex_buffer(), false, self.normal_vector.iter().cloned()).unwrap());
-        self.index_buffer = Some(CpuAccessibleBuffer::from_iter(self.device.clone(), BufferUsage::index_buffer(), false, self.index_vector.iter().cloned()).unwrap());
-
-        ((*self.vertex_buffer.as_ref().unwrap()).clone(), (*self.normal_buffer.as_ref().unwrap()).clone(), (*self.index_buffer.as_ref().unwrap()).clone())
-    }
-
-    pub fn get_buffers(&self) -> (Arc<CpuAccessibleBuffer<[geometry::Vertex]>>, Arc<CpuAccessibleBuffer<[geometry::Normal]>>, Arc<CpuAccessibleBuffer<[u16]>>) {
-        ((*self.vertex_buffer.as_ref().unwrap()).clone(), (*self.normal_buffer.as_ref().unwrap()).clone(), (*self.index_buffer.as_ref().unwrap()).clone())
-    }
-
-    pub fn get_pipeline(&self, device: Arc<Device>, render_pass: Arc<dyn RenderPassAbstract + Send + Sync>) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
-        let pipeline = Arc::new(GraphicsPipeline::start()
-            .vertex_input(TwoBuffersDefinition::<geometry::Vertex, geometry::Normal>::new())
-            .vertex_shader(self.vertex_shader.main_entry_point(), ())
-            .triangle_list()
-            .viewports_dynamic_scissors_irrelevant(1)
-            .viewports(iter::once(Viewport {
-                origin: [0.0, 0.0],
-                dimensions: [1024.0, 768.0],
-                depth_range: 0.0 .. 1.0,
-            }))
-            .fragment_shader(self.fragment_shader.main_entry_point(), ())
-            .depth_stencil_simple_depth()
-            .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
-            .cull_mode_back()
-            .polygon_mode_fill() // can be _line for wireframe
-            .build(device.clone())
-            .unwrap());
-
-        pipeline
-    }
-
-    pub fn get_uniforms(&self) -> Arc<CpuBufferPoolSubbuffer<vs::ty::Data, Arc<StdMemoryPool>>> {
-        // let elapsed = self.delta.elapsed();
-        
-        let aspect_ratio = 1024.0 / 768.0;
-        let proj = cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 1000.0);
-        let view = Matrix4::look_at(Point3::new(0.0, 0.0, 0.0), Point3::new(0.0, 0.0, -1000.0), Vector3::new(0.0, -1.0, 0.0));
-
-        let colors = [
-            // Temperate
-            [0x19 as f32 / 255.0, 0x7b as f32 / 255.0, 0x30 as f32 / 255.0, 0.0],
-            [0.0, 0x58 as f32 / 255.0, 0x26 as f32 / 255.0, 0.0],
-            [1.0, 1.0, 1.0, 0.0],
-
-            // Desert
-            [0xEF as f32 / 255.0, 0xDE as f32 / 255.0, 0xC2 as f32 / 255.0, 0.0],
-            [0xDA as f32 / 255.0, 0xC2 as f32 / 255.0, 0x72 as f32 / 255.0, 0.0],
-            [0xA8 as f32 / 255.0, 0x65 as f32 / 255.0, 0x1E as f32 / 255.0, 0.0]
-        ];
-
-        let uniform_data = vs::ty::Data {
-            _dummy0: [0, 0, 1, 0],
-            _dummy1: [0, 0, 0, 0],
-            _dummy2: [0, 0, 0, 0],
-            viewMatrix: view.into(),
-            projectionMatrix: proj.into(),
-            viewPosition: Vector4::new(0.0, 0.0, 0.0, 0.0).into(),
-
-            id: self.id,
-            seed: self.seed,
-            size: self.radius,
-            color: colors,
-            colorAtm: Vector3::new(0x66 as f32 / 255.0, 0xD5 as f32 / 255.0, 0xED as f32 / 255.0).into(),
-            colorWater: Vector3::new(0.0, 0xAE as f32 / 255.0, 0xEF as f32 / 255.0).into(),
-            colorDeepWater: Vector3::new(0x38 as f32 / 255.0, 0x3C as f32 / 255.0, 0x80 as f32 / 255.0).into(),
-            obliquity: 0.1
-        };
-
-        Arc::new(self.uniform_buffer.next(uniform_data).unwrap())
-    }
-
-    pub fn get_position(&self) -> [f32; 3] {
-        [self.translation.x, self.translation.y, self.translation.z]
-    }
-
-    pub fn get_mass(&self) -> f32 {
-        self.mass
-    }
-
-    pub fn get_rad(&self) -> f32 {
-        self.radius
-    }
-
-    pub fn get_id(&self) -> u32 {
-        self.id
-    }
 }
-
-mod vs {
-    vulkano_shaders::shader!{
-        ty: "vertex",
-        include: ["src/shaders"],
-        path: "src/shaders/terraplanet.vert"
-    }
-}
-
-mod fs {
-    vulkano_shaders::shader!{
-        ty: "fragment",
-        include: ["src/shaders"],
-        path: "src/shaders/terraplanet.frag"
-    }
-}
-
-#[allow(dead_code)]
-const X: &str = include_str!("shaders/terraplanet.vert");
-#[allow(dead_code)]
-const Y: &str = include_str!("shaders/terraplanet.frag");
-#[allow(dead_code)]
-const Z: &str = include_str!("shaders/lighting.glsl");
-#[allow(dead_code)]
-const A: &str = include_str!("shaders/noise.glsl");

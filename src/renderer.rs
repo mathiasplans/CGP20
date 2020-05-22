@@ -26,7 +26,8 @@ use vulkano::descriptor::descriptor_set::{PersistentDescriptorSet, PersistentDes
 use vulkano_win::VkSurfaceBuild;
 use winit::window::{WindowBuilder, Window};
 use winit::event_loop::{EventLoop, ControlFlow};
-use winit::event::{Event, WindowEvent};
+use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState};
+use winit::event::WindowEvent::CursorMoved;
 
 use cgmath::{Matrix3, Matrix4, Point3, Vector3, Rad};
 
@@ -40,6 +41,9 @@ use std::cmp;
 // #[path = "icosphere.rs"] mod icosphere;
 // use icosphere::Icosphere;
 use crate::icosphere::Icosphere;
+use crate::terraplanet::TerraPlanet;
+use crate::sun::Sun;
+use crate::camera::Camera;
 
 pub struct Renderer {
     surface: Arc<Surface<Window>>,
@@ -48,13 +52,12 @@ pub struct Renderer {
     swapchain: Arc<Swapchain<Window>>,
     images: Vec<Arc<SwapchainImage<Window>>>,
 
-    dimensions: [u32; 2],
-
     device: Arc<Device>,
     queue: Arc<Queue>,
     event_loop: EventLoop<()>,
 
-    objects: Vec<Icosphere>
+    objects: Vec<Icosphere>,
+    dimensions: [u32; 2],
 }
 
 impl Renderer {
@@ -102,13 +105,12 @@ impl Renderer {
             swapchain: swapchain,
             images: images,
 
-            dimensions: dimensions,
-
             device: dev.0,
             queue: queue,
             event_loop: event_loop,
 
-            objects: Vec::new()
+            objects: Vec::new(),
+            dimensions: dimensions
         }
     }
 
@@ -116,51 +118,62 @@ impl Renderer {
         self.device.clone()
     }
 
-    pub fn get_planet_buffer(&self, objects: &'static Vec<Icosphere>) -> Arc<CpuAccessibleBuffer<[movement_cs::ty::planet_struct]>> {
-        unsafe {
-            // CpuAccessibleBuffer::uninitialized_array(self.get_device(), planet_amount as usize, BufferUsage::all(), false).unwrap()
-            CpuAccessibleBuffer::from_iter(
-                self.device.clone(),
-                BufferUsage::all(),
-                false,
-                objects.into_iter().map(|x| {
-                    print!("{:?}\n", x.get_position());
-                    movement_cs::ty::planet_struct {
-                        _dummy0: [0, 0, 0, 0],
-                        _dummy1: [0, 0, 0, 0],
-                        pos: x.get_position(),
-                        velocity: [0.0, 0.0, 0.0],
-                        mass: x.get_mass(),
-                        rad: x.get_rad(),
-                        rotation: [0.0, 0.0, 0.0],
-                        // rotationRate: [3.0, 0.5, 1.0],
-                        rotationRate: [0.0, 0.0, 0.0],
-                        modelMatrix: [
-                            [0.0, 0.0, 0.0, 0.0], 
-                            [0.0, 0.0, 0.0, 0.0], 
-                            [0.0, 0.0, 0.0, 0.0], 
-                            [0.0, 0.0, 0.0, 0.0]
-                        ]
-                    }
-                })
-            ).unwrap()
+    fn create_pst(pos: [f32; 3], velocity: [f32; 3], mass: f32, rad: f32) -> movement_cs::ty::planet_struct {
+        movement_cs::ty::planet_struct {
+            _dummy0: [0, 0, 0, 0],
+            _dummy1: [0, 0, 0, 0],
+            pos: pos,
+            velocity: velocity,
+            mass: mass,
+            rad: rad,
+            rotation: [0.0, 0.0, 0.0],
+            rotationRate: [0.0, 0.0, 0.0],
+            modelMatrix: [
+                [0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0]
+            ]
         }
     }
 
-    pub fn start(self, objects: &'static Vec<Icosphere>) {
+    pub fn get_planet_buffer(&self, suns: &'static Vec<Sun>, terraplanets: &'static Vec<TerraPlanet>) -> Arc<CpuAccessibleBuffer<[movement_cs::ty::planet_struct]>> {
+        // Create data vector
+        let mut data: Vec<movement_cs::ty::planet_struct> = Vec::new();
+
+        suns.into_iter().for_each(|x| {
+            print!("{:?}\n", x.get_position());
+            data.push(Self::create_pst(x.get_position(), [0.0, 0.0, 0.0], x.get_mass(), x.get_rad()));
+        });
+
+        terraplanets.into_iter().for_each(|x| {
+            print!("{:?}\n", x.get_position());
+            data.push(Self::create_pst(x.get_position(), [0.0, 0.0, 0.0], x.get_mass(), x.get_rad()));
+        });
+
+        // CpuAccessibleBuffer::uninitialized_array(self.get_device(), planet_amount as usize, BufferUsage::all(), false).unwrap()
+        CpuAccessibleBuffer::from_iter(
+            self.device.clone(),
+            BufferUsage::all(),
+            false,
+            data.iter().map(|x| *x)
+        ).unwrap()
+    }
+
+    pub fn start(self, suns: &'static Vec<Sun>, terraplanets: &'static Vec<TerraPlanet>) {
         // Get the amount of planets
-        let planet_amount = objects.len() as u32;
+        let planet_amount = (suns.len() + terraplanets.len()) as u32;
         print!("Total amount of planets: {:?}\n", planet_amount);
 
         // Create a buffer for planet info
         // Specify the type.
-        let planet_buffer = self.get_planet_buffer(objects);
+        let planet_buffer = self.get_planet_buffer(suns, terraplanets);
 
         // // Specialization constants for the gravity shader
         // let spec_const = movement_cs::SpecializationConstants {
         //     local_size_x_id: planet_amount
         // };
-                
+
         // Create a compute shader for movement
         let movement_shader = movement_cs::Shader::load(self.get_device())
             .expect("failed to create shader module");
@@ -174,6 +187,8 @@ impl Renderer {
             .add_buffer(planet_buffer.clone()).unwrap()
             .build().unwrap()
         );
+
+        let mut camera = Camera::new(Vector3::new(0.0, 0.0, 0.0), self.dimensions[0], self.dimensions[1]);
 
         let render_pass = Arc::new(
             vulkano::single_pass_renderpass!(self.device.clone(),
@@ -232,8 +247,25 @@ impl Renderer {
 
         let compute_time = Instant::now();
 
-        self.event_loop.run(move |event, _, control_flow| {
-            match event {
+        let mut last_cursor_place: [i32; 2] = [0x7FFFFFFF, 0x7FFFFFFF];
+
+        self.event_loop.run(move |e, _, control_flow| {
+            match e {
+                Event::WindowEvent { event: CursorMoved { position: cursor_position, .. }, .. } => {
+                    if last_cursor_place[0] != 0x7FFFFFFF {
+                        let delta = (last_cursor_place[0] - cursor_position.x as i32, last_cursor_place[1] - cursor_position.y as i32);
+                        // camera.mouse_move(delta.0, delta.1);
+                    }
+
+                    last_cursor_place[0] = cursor_position.x as i32;
+                    last_cursor_place[1] = cursor_position.y as i32;
+                }
+                Event::WindowEvent { event: WindowEvent::KeyboardInput { input: KeyboardInput { virtual_keycode: kc, state: s, .. }, .. }, .. } => {
+                    match s {
+                        ElementState::Pressed => camera.key_update(kc.unwrap(), true),
+                        ElementState::Released => camera.key_update(kc.unwrap(), false)
+                    }
+                },
                 Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                     *control_flow = ControlFlow::Exit;
                 },
@@ -290,6 +322,9 @@ impl Renderer {
                     compute_pc.delta = compute_pc.time - last_time;
                     compute_pc.circular = compute_pc.time;
 
+                    // Get camera data
+                    camera.update(compute_pc.delta);
+
                     // print!("{:?}\n", compute_pc.delta);
 
                     if compute_pc.circular > 6.28318530718 {
@@ -300,20 +335,39 @@ impl Renderer {
                         // Compute pipeline
                         // Movement
                         .dispatch([planet_amount, 1, 1], movement_pipeline.clone(), movement_set.clone(), compute_pc).unwrap()
-                        
+
                         // Graphich pipeline
                         .begin_render_pass(
                             framebuffers[image_num].clone(), false,
                             vec![
-                                [0.0, 0.0, 1.0, 1.0].into(),
+                                [0.0, 0.0, 0.0, 1.0].into(),
                                 1f32.into()
                             ]
                         ).unwrap();
 
-                    for x in objects {
+                    for x in suns {
                         let buffer = x.get_buffers();
                         let pipeline = x.get_pipeline(device.clone(), render_pass.clone());
-                        let uniforms = x.get_uniforms();
+                        let uniforms = x.get_uniforms(&camera);
+
+
+                        let descriptor_set = PersistentDescriptorSet::start(pipeline.descriptor_set_layout(0).unwrap().clone())
+                            .add_buffer(uniforms).unwrap()
+                            .add_buffer(planet_buffer.clone()).unwrap()
+                            .build().unwrap();
+
+                        command_buffer = command_buffer.draw_indexed(
+                            pipeline.clone(),
+                            &DynamicState::none(),
+                            vec!(buffer.0.clone(), buffer.1.clone()),
+                            buffer.2.clone(), descriptor_set, planet_amount
+                        ).unwrap();
+                    }
+
+                    for x in terraplanets {
+                        let buffer = x.get_buffers();
+                        let pipeline = x.get_pipeline(device.clone(), render_pass.clone());
+                        let uniforms = x.get_uniforms(&camera);
 
 
                         let descriptor_set = PersistentDescriptorSet::start(pipeline.descriptor_set_layout(0).unwrap().clone())
