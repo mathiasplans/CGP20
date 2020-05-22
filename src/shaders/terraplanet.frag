@@ -12,11 +12,6 @@ layout(set = 0, binding = 0) uniform Data {
   vec3 colorAtm;
   vec3 colorWater;
   vec3 colorDeepWater;
-
-    // sampler2D locs;
-    // vec3 viewPosition;
-
-    // positive when top half is closer to light, negative if bottom half is closer to light
   float obliquity;
 } uniforms;
 
@@ -56,7 +51,7 @@ void main() {
 
   // Normalized local position
   // vec3 normalPosition = interpolatedLocalPosition / pposr.w;
-  vec3 normalPosition = interpolatedLocalPosition / uniforms.size;
+  vec3 normalPosition = normalize(interpolatedLocalPosition);
 
   // Calculate f by combining multiple noise layers using different density
   float f = 0.0;
