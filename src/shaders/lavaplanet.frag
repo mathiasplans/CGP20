@@ -3,15 +3,15 @@
 layout(set = 0, binding = 0) uniform Data {
   mat4 viewMatrix;
   mat4 projectionMatrix;
-  vec4 viewPosition;
+  vec3 viewPosition;
 
   uint id;
   float seed;
   float size;
-  vec4 color[6];
-  vec3 colorAtm;
-  vec3 colorWater;
-  vec3 colorDeepWater;
+  vec4 colorDeepLava;
+  vec4 colorLava;
+  vec4 colorBurnedGround;
+  vec4 colorAsh;
   float obliquity;
 } uniforms;
 
@@ -36,11 +36,15 @@ layout(location = 0) out vec4 frag_color;
 
 void main() {
   // Luminosity, get from texture
-  vec4 lposr = texture2D(locs, vec2(0.5 / float(bodycount), 0.5));
-  vec4 pposr = texture2D(locs, vec2((0.5 + float(id)) / float(bodycount), 0.5));
-  float lum = luminosity(locs, id, bodycount, interpolatedPosition, lposr);
+  // Luminosity, get from texture
+  vec3 lpos = planet_data.buf[0].pos;
+  float lum = luminosity(uniforms.id, pc.nr_of_casters, interpolatedPosition);
 
-  vec3 normalPosition = interpolatedLocalPosition / pposr.w;
+  // Distance from light
+  // float ldist = length(lposr.xyz - pposr.xyz);
+  float ldist = length(lpos - planet_data.buf[uniforms.id].pos);
+
+  vec3 normalPosition = interpolatedLocalPosition / uniforms.size;
 
   // Calculate f by combining multiple noise layers using different density
   float f = 0.0;
@@ -56,10 +60,10 @@ void main() {
   vec3 n = normalize(interpolatedNormal);
 
   // 3. Find the direction towards the viewer, normalize.
-  vec3 v = normalize(viewPosition - interpolatedPosition);
+  vec3 v = normalize(uniforms.viewPosition - interpolatedPosition);
 
   // 4. Find the direction towards the light source, normalize.
-  vec3 l = normalize(lposr.xyz - interpolatedPosition);
+  vec3 l = normalize(lpos - interpolatedPosition);
 
   // Find angle between light and normal
   float landing = dot(l, n);
@@ -70,17 +74,17 @@ void main() {
   vec3 lavaglow = vec3(0.0);
 
   if (f > 0.4 + landing){
-    noiseColor = colorAsh;
+    noiseColor = uniforms.colorAsh.xyz;
 
   } else if (f > 0.2 + landing)
-    noiseColor = mix(colorBurnedGround, colorAsh, (f - 0.2) * 5.0);
+    noiseColor = mix(uniforms.colorBurnedGround, uniforms.colorAsh, (f - 0.2) * 5.0).xyz;
 
   else if (f > -0.3 + landing / 20.0)
-    noiseColor = mix(colorLava, colorBurnedGround, (f + 0.3) * 8.5);
+    noiseColor = mix(uniforms.colorLava, uniforms.colorBurnedGround, (f + 0.3) * 8.5).xyz;
 
   else {
     float depth = min(1.0, -(f + 0.2));
-    noiseColor = mix(colorLava, colorDeepLava, depth);
+    noiseColor = mix(uniforms.colorLava, uniforms.colorDeepLava, depth).xyz;
     lavaglow = noiseColor;
   }
 
@@ -90,5 +94,5 @@ void main() {
   // Put Diffuse, specular and glow light together to get the end result
   vec3 interpolatedColor = max(lum * (noiseColor * diffuse), lavaglow);
 
-  gl_FragColor = vec4(interpolatedColor, 1.0);
+  frag_color = vec4(interpolatedColor, 1.0);
 }

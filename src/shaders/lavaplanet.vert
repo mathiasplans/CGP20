@@ -6,15 +6,15 @@ layout(location = 1) in vec3 normal;
 layout(set = 0, binding = 0) uniform Data {
   mat4 viewMatrix;
   mat4 projectionMatrix;
-  vec4 viewPosition;
+  vec3 viewPosition;
 
   uint id;
   float seed;
   float size;
-  vec4 color[6];
-  vec3 colorAtm;
-  vec3 colorWater;
-  vec3 colorDeepWater;
+  vec4 colorDeepLava;
+  vec4 colorLava;
+  vec4 colorBurnedGround;
+  vec4 colorAsh;
   float obliquity;
 } uniforms;
 
@@ -62,5 +62,5 @@ void main() {
     0.0, 0.0, 0.0, 1.0
   );
 
-  gl_Position = projectionMatrix * viewMatrix * planet_positions.buf[uniforms.id].modelMatrix * terrainScale * vec4(position, 1.0);
+  gl_Position = uniforms.projectionMatrix * uniforms.viewMatrix * planet_positions.buf[uniforms.id].modelMatrix * terrainScale * vec4(position, 1.0);
 }

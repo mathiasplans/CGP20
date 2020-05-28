@@ -35,6 +35,8 @@ use std::time::Instant;
 
 use std::collections::HashMap;
 use std::cmp;
+use std::env;
+use std::process::exit;
 
 pub mod icosphere;
 pub mod renderer;
@@ -45,22 +47,41 @@ pub mod sun;
 pub mod camera;
 pub mod initconf;
 pub mod idgen;
+pub mod lavaplanet;
+pub mod skybox;
 
 use icosphere::Icosphere;
 use renderer::Renderer;
 use terraplanet::TerraPlanet;
 use sun::Sun;
-use initconf::random_config;
+use initconf::{random_config, stable_config, system_config};
+use lavaplanet::LavaPlanet;
 
 
 fn main() {
+    // Command line arguments
+    let args: Vec<String> = env::args().collect();
+
     let r = Renderer::setup();
     let device = r.get_device();
 
-    let c = random_config(device, 12);
+    let c: (Vec<Sun>, Vec<TerraPlanet>, Vec<LavaPlanet>);
+    match args[1].as_str() {
+        "random" => c = random_config(device, 15),
+        "stable" => c = stable_config(device),
+        "system" => c = system_config(device),
+        _ => {println!("Second argument has to be: random, stable, or system"); exit(1)}
+    }
+
+    let speed: f32 = args[2].parse().unwrap();
+
+    // let c = random_config(device, 12);
+    // // let c = stable_config(device);
+    // // let c = system_config(device);
 
     static mut SUNS: Vec<Sun> = Vec::new();
     static mut TERRAPLANETS: Vec<TerraPlanet> = Vec::new();
+    static mut LAVAPLANET: Vec<LavaPlanet> = Vec::new();
 
     unsafe {
         for a in c.0 {
@@ -70,6 +91,11 @@ fn main() {
         for a in c.1 {
             TERRAPLANETS.push(a);
         }
-        r.start(&SUNS, &TERRAPLANETS);
+
+        for a in c.2 {
+            LAVAPLANET.push(a);
+        }
+
+        r.start(&SUNS, &TERRAPLANETS, &LAVAPLANET, speed);
     }
 }

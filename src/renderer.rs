@@ -38,12 +38,16 @@ use std::time::Instant;
 use std::collections::HashMap;
 use std::cmp;
 
+use rand::{Rng, SeedableRng, rngs::StdRng};
+
 // #[path = "icosphere.rs"] mod icosphere;
 // use icosphere::Icosphere;
 use crate::icosphere::Icosphere;
 use crate::terraplanet::TerraPlanet;
 use crate::sun::Sun;
 use crate::camera::Camera;
+use crate::lavaplanet::LavaPlanet;
+use crate::skybox::SkyBox;
 
 pub struct Renderer {
     surface: Arc<Surface<Window>>,
@@ -119,6 +123,9 @@ impl Renderer {
     }
 
     fn create_pst(pos: [f32; 3], velocity: [f32; 3], mass: f32, rad: f32) -> movement_cs::ty::planet_struct {
+        // RNG
+        let mut rng = StdRng::seed_from_u64(28941092);
+
         movement_cs::ty::planet_struct {
             _dummy0: [0, 0, 0, 0],
             _dummy1: [0, 0, 0, 0],
@@ -127,7 +134,7 @@ impl Renderer {
             mass: mass,
             rad: rad,
             rotation: [0.0, 0.0, 0.0],
-            rotationRate: [0.0, 0.0, 0.0],
+            rotationRate: [rng.gen(), rng.gen(), rng.gen()],
             modelMatrix: [
                 [0.0, 0.0, 0.0, 0.0],
                 [0.0, 0.0, 0.0, 0.0],
@@ -137,18 +144,23 @@ impl Renderer {
         }
     }
 
-    pub fn get_planet_buffer(&self, suns: &'static Vec<Sun>, terraplanets: &'static Vec<TerraPlanet>) -> Arc<CpuAccessibleBuffer<[movement_cs::ty::planet_struct]>> {
+    pub fn get_planet_buffer(&self, suns: &'static Vec<Sun>, terraplanets: &'static Vec<TerraPlanet>, lavaplanets: &'static Vec<LavaPlanet>) -> Arc<CpuAccessibleBuffer<[movement_cs::ty::planet_struct]>> {
         // Create data vector
         let mut data: Vec<movement_cs::ty::planet_struct> = Vec::new();
 
         suns.into_iter().for_each(|x| {
             print!("{:?}\n", x.get_position());
-            data.push(Self::create_pst(x.get_position(), [0.0, 0.0, 0.0], x.get_mass(), x.get_rad()));
+            data.push(Self::create_pst(x.get_position(), x.get_velocity(), x.get_mass(), x.get_rad()));
         });
 
         terraplanets.into_iter().for_each(|x| {
             print!("{:?}\n", x.get_position());
-            data.push(Self::create_pst(x.get_position(), [0.0, 0.0, 0.0], x.get_mass(), x.get_rad()));
+            data.push(Self::create_pst(x.get_position(), x.get_velocity(), x.get_mass(), x.get_rad()));
+        });
+
+        lavaplanets.into_iter().for_each(|x| {
+            print!("{:?}\n", x.get_position());
+            data.push(Self::create_pst(x.get_position(), x.get_velocity(), x.get_mass(), x.get_rad()));
         });
 
         // CpuAccessibleBuffer::uninitialized_array(self.get_device(), planet_amount as usize, BufferUsage::all(), false).unwrap()
@@ -160,14 +172,14 @@ impl Renderer {
         ).unwrap()
     }
 
-    pub fn start(self, suns: &'static Vec<Sun>, terraplanets: &'static Vec<TerraPlanet>) {
+    pub fn start(self, suns: &'static Vec<Sun>, terraplanets: &'static Vec<TerraPlanet>, lavaplanets: &'static Vec<LavaPlanet>, speed: f32) {
         // Get the amount of planets
-        let planet_amount = (suns.len() + terraplanets.len()) as u32;
+        let planet_amount = (suns.len() + terraplanets.len() + lavaplanets.len()) as u32;
         print!("Total amount of planets: {:?}\n", planet_amount);
 
         // Create a buffer for planet info
         // Specify the type.
-        let planet_buffer = self.get_planet_buffer(suns, terraplanets);
+        let planet_buffer = self.get_planet_buffer(suns, terraplanets, lavaplanets);
 
         // // Specialization constants for the gravity shader
         // let spec_const = movement_cs::SpecializationConstants {
@@ -249,6 +261,9 @@ impl Renderer {
 
         let mut last_cursor_place: [i32; 2] = [0x7FFFFFFF, 0x7FFFFFFF];
 
+        // Create skybox
+        let skybox = SkyBox::new(self.device.clone());
+
         self.event_loop.run(move |e, _, control_flow| {
             match e {
                 Event::WindowEvent { event: CursorMoved { position: cursor_position, .. }, .. } => {
@@ -323,7 +338,9 @@ impl Renderer {
                     compute_pc.circular = compute_pc.time;
 
                     // Get camera data
-                    camera.update(compute_pc.delta);
+                    camera.update(compute_pc.delta * 5.0);
+
+                    compute_pc.delta *= speed;
 
                     // print!("{:?}\n", compute_pc.delta);
 
@@ -380,6 +397,42 @@ impl Renderer {
                             &DynamicState::none(),
                             vec!(buffer.0.clone(), buffer.1.clone()),
                             buffer.2.clone(), descriptor_set, planet_amount
+                        ).unwrap();
+                    }
+
+                    for x in lavaplanets {
+                        let buffer = x.get_buffers();
+                        let pipeline = x.get_pipeline(device.clone(), render_pass.clone());
+                        let uniforms = x.get_uniforms(&camera);
+
+                        let descriptor_set = PersistentDescriptorSet::start(pipeline.descriptor_set_layout(0).unwrap().clone())
+                            .add_buffer(uniforms).unwrap()
+                            .add_buffer(planet_buffer.clone()).unwrap()
+                            .build().unwrap();
+
+                        command_buffer = command_buffer.draw_indexed(
+                            pipeline.clone(),
+                            &DynamicState::none(),
+                            vec!(buffer.0.clone(), buffer.1.clone()),
+                            buffer.2.clone(), descriptor_set, planet_amount
+                        ).unwrap();
+                    }
+
+                    // Skybox
+                    {
+                        let buffer = skybox.get_buffers();
+                        let pipeline = skybox.get_pipeline(device.clone(), render_pass.clone());
+                        let uniforms = skybox.get_uniforms(&camera);
+
+                        let descriptor_set = PersistentDescriptorSet::start(pipeline.descriptor_set_layout(0).unwrap().clone())
+                            .add_buffer(uniforms).unwrap()
+                            .build().unwrap();
+
+                        command_buffer = command_buffer.draw_indexed(
+                            pipeline.clone(),
+                            &DynamicState::none(),
+                            vec!(buffer.0.clone(), buffer.1.clone()),
+                            buffer.2.clone(), descriptor_set, ()
                         ).unwrap();
                     }
 

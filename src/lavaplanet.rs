@@ -40,13 +40,13 @@ use crate::color::RGBA;
 use crate::camera::Camera;
 
 // Inspired by http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html
-pub struct TerraPlanet {
+pub struct LavaPlanet {
     device: Arc<Device>,
 
     vertex_buffer: Option<Arc<CpuAccessibleBuffer<[Vertex]>>>,
     normal_buffer: Option<Arc<CpuAccessibleBuffer<[Normal]>>>,
     index_buffer: Option<Arc<CpuAccessibleBuffer<[u16]>>>,
-    uniform_buffer: CpuBufferPool<terraplanet_vs::ty::Data>,
+    uniform_buffer: CpuBufferPool<lavaplanet_vs::ty::Data>,
 
     radius: f32,
     mass: f32,
@@ -57,21 +57,21 @@ pub struct TerraPlanet {
     translation: Vector3<f32>,
     velocity: Vector3<f32>,
 
-    vertex_shader: terraplanet_vs::Shader,
-    fragment_shader: terraplanet_fs::Shader,
+    vertex_shader: lavaplanet_vs::Shader,
+    fragment_shader: lavaplanet_fs::Shader,
 
     seed: f32
 }
 
-impl TerraPlanet {
+impl LavaPlanet {
     pub fn new(device: Arc<Device>, radius: f32, mass: f32, position: Vector3<f32>, id: u32, seed: f32, velocity: Vector3<f32>) -> Self {
-        let mut is = TerraPlanet {
+        let mut is = LavaPlanet {
             device: device.clone(),
 
             vertex_buffer: None,
             normal_buffer: None,
             index_buffer: None,
-            uniform_buffer: CpuBufferPool::<terraplanet_vs::ty::Data>::new(device.clone(), BufferUsage::all()),
+            uniform_buffer: CpuBufferPool::<lavaplanet_vs::ty::Data>::new(device.clone(), BufferUsage::all()),
 
             radius: radius,
             mass: mass,
@@ -82,8 +82,8 @@ impl TerraPlanet {
             translation: position,
             velocity: velocity,
 
-            vertex_shader: terraplanet_vs::Shader::load(device.clone()).unwrap(),
-            fragment_shader: terraplanet_fs::Shader::load(device.clone()).unwrap(),
+            vertex_shader: lavaplanet_vs::Shader::load(device.clone()).unwrap(),
+            fragment_shader: lavaplanet_fs::Shader::load(device.clone()).unwrap(),
 
             seed: seed
         };
@@ -128,7 +128,7 @@ impl TerraPlanet {
         pipeline
     }
 
-    pub fn get_uniforms(&self, camera: &Camera) -> Arc<CpuBufferPoolSubbuffer<terraplanet_vs::ty::Data, Arc<StdMemoryPool>>> {
+    pub fn get_uniforms(&self, camera: &Camera) -> Arc<CpuBufferPoolSubbuffer<lavaplanet_vs::ty::Data, Arc<StdMemoryPool>>> {
         // let elapsed = self.delta.elapsed();
 
         let aspect_ratio = 1024.0 / 768.0;
@@ -139,23 +139,8 @@ impl TerraPlanet {
             camera.get_up()
         );
 
-        let colors = [
-            // Temperate
-            RGBA::new(0x197B30, 0.0).as_rgba(),
-            RGBA::new(0x005826, 0.0).as_rgba(),
-            RGBA::new(0xFFFFFF, 0.0).as_rgba(),
-
-
-            // Desert
-            RGBA::new(0xEFDEC2, 0.0).as_rgba(),
-            RGBA::new(0xDAC272, 0.0).as_rgba(),
-            RGBA::new(0xA8651E, 0.0).as_rgba()
-        ];
-
-        let uniform_data = terraplanet_vs::ty::Data {
+        let uniform_data = lavaplanet_vs::ty::Data {
             _dummy0: [0, 0, 1, 0, 0, 0, 0, 0],
-            _dummy1: [0, 0, 0, 0],
-            _dummy2: [0, 0, 0, 0],
             viewMatrix: view.into(),
             projectionMatrix: proj.into(),
             viewPosition: camera.get_position().into(),
@@ -163,10 +148,10 @@ impl TerraPlanet {
             id: self.id,
             seed: self.seed,
             size: self.radius,
-            color: colors,
-            colorAtm: RGBA::new(0x66D5ED, 0.0).as_rgb(),
-            colorWater: RGBA::new(0x00AEEF, 0.0).as_rgb(),
-            colorDeepWater: RGBA::new(0x383C80, 0.0).as_rgb(),
+            colorDeepLava: RGBA::new(0xFCEB1E, 0.0).as_rgba(),
+            colorLava: RGBA::new(0xff8921, 0.0).as_rgba(),
+            colorBurnedGround: RGBA::new(0x6e3d13, 0.0).as_rgba(),
+            colorAsh: RGBA::new(0x3d240e, 0.0).as_rgba(),
             obliquity: 0.1
         };
 
@@ -194,26 +179,26 @@ impl TerraPlanet {
     }
 }
 
-mod terraplanet_vs {
+mod lavaplanet_vs {
     vulkano_shaders::shader!{
         ty: "vertex",
         include: ["src/shaders"],
-        path: "src/shaders/terraplanet.vert"
+        path: "src/shaders/lavaplanet.vert"
     }
 }
 
-mod terraplanet_fs {
+mod lavaplanet_fs {
     vulkano_shaders::shader!{
         ty: "fragment",
         include: ["src/shaders"],
-        path: "src/shaders/terraplanet.frag"
+        path: "src/shaders/lavaplanet.frag"
     }
 }
 
 #[allow(dead_code)]
-const X: &str = include_str!("shaders/terraplanet.vert");
+const X: &str = include_str!("shaders/lavaplanet.vert");
 #[allow(dead_code)]
-const Y: &str = include_str!("shaders/terraplanet.frag");
+const Y: &str = include_str!("shaders/lavaplanet.frag");
 #[allow(dead_code)]
 const Z: &str = include_str!("shaders/lighting.glsl");
 #[allow(dead_code)]

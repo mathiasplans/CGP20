@@ -39,56 +39,43 @@ use crate::icosphere::Icosphere;
 use crate::color::RGBA;
 use crate::camera::Camera;
 
-// Inspired by http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html
-pub struct TerraPlanet {
+pub struct SkyBox {
     device: Arc<Device>,
 
     vertex_buffer: Option<Arc<CpuAccessibleBuffer<[Vertex]>>>,
     normal_buffer: Option<Arc<CpuAccessibleBuffer<[Normal]>>>,
     index_buffer: Option<Arc<CpuAccessibleBuffer<[u16]>>>,
-    uniform_buffer: CpuBufferPool<terraplanet_vs::ty::Data>,
+    uniform_buffer: CpuBufferPool<skybox_vs::ty::Data>,
 
     radius: f32,
-    mass: f32,
-    id: u32,
 
-    delta: Instant,
-
-    translation: Vector3<f32>,
-    velocity: Vector3<f32>,
-
-    vertex_shader: terraplanet_vs::Shader,
-    fragment_shader: terraplanet_fs::Shader,
+    vertex_shader: skybox_vs::Shader,
+    fragment_shader: skybox_fs::Shader,
 
     seed: f32
 }
 
-impl TerraPlanet {
-    pub fn new(device: Arc<Device>, radius: f32, mass: f32, position: Vector3<f32>, id: u32, seed: f32, velocity: Vector3<f32>) -> Self {
-        let mut is = TerraPlanet {
+impl SkyBox {
+    pub fn new(device: Arc<Device>) -> Self {
+        let radius = 5.0;
+
+        let mut is = SkyBox {
             device: device.clone(),
 
             vertex_buffer: None,
             normal_buffer: None,
             index_buffer: None,
-            uniform_buffer: CpuBufferPool::<terraplanet_vs::ty::Data>::new(device.clone(), BufferUsage::all()),
+            uniform_buffer: CpuBufferPool::<skybox_vs::ty::Data>::new(device.clone(), BufferUsage::all()),
 
             radius: radius,
-            mass: mass,
-            id: id,
 
-            delta: Instant::now(),
+            vertex_shader: skybox_vs::Shader::load(device.clone()).unwrap(),
+            fragment_shader: skybox_fs::Shader::load(device.clone()).unwrap(),
 
-            translation: position,
-            velocity: velocity,
-
-            vertex_shader: terraplanet_vs::Shader::load(device.clone()).unwrap(),
-            fragment_shader: terraplanet_fs::Shader::load(device.clone()).unwrap(),
-
-            seed: seed
+            seed: 0.12
         };
 
-        is.build_buffers(Icosphere::new(radius, 6));
+        is.build_buffers(Icosphere::new(radius, 2));
 
         is
     }
@@ -115,12 +102,12 @@ impl TerraPlanet {
             .viewports(iter::once(Viewport {
                 origin: [0.0, 0.0],
                 dimensions: [1024.0, 768.0],
-                depth_range: 0.0 .. 1.0,
+                depth_range: 0.99 .. 1.0,
             }))
             .fragment_shader(self.fragment_shader.main_entry_point(), ())
             .depth_stencil_simple_depth()
             .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
-            .cull_mode_back()
+            .cull_mode_front()
             .polygon_mode_fill() // can be _line for wireframe
             .build(device.clone())
             .unwrap());
@@ -128,7 +115,7 @@ impl TerraPlanet {
         pipeline
     }
 
-    pub fn get_uniforms(&self, camera: &Camera) -> Arc<CpuBufferPoolSubbuffer<terraplanet_vs::ty::Data, Arc<StdMemoryPool>>> {
+    pub fn get_uniforms(&self, camera: &Camera) -> Arc<CpuBufferPoolSubbuffer<skybox_vs::ty::Data, Arc<StdMemoryPool>>> {
         // let elapsed = self.delta.elapsed();
 
         let aspect_ratio = 1024.0 / 768.0;
@@ -139,82 +126,39 @@ impl TerraPlanet {
             camera.get_up()
         );
 
-        let colors = [
-            // Temperate
-            RGBA::new(0x197B30, 0.0).as_rgba(),
-            RGBA::new(0x005826, 0.0).as_rgba(),
-            RGBA::new(0xFFFFFF, 0.0).as_rgba(),
+        let translation = Matrix4::from_translation(Vector3::new(camera.get_position().x, camera.get_position().y, camera.get_position().z));
 
 
-            // Desert
-            RGBA::new(0xEFDEC2, 0.0).as_rgba(),
-            RGBA::new(0xDAC272, 0.0).as_rgba(),
-            RGBA::new(0xA8651E, 0.0).as_rgba()
-        ];
-
-        let uniform_data = terraplanet_vs::ty::Data {
-            _dummy0: [0, 0, 1, 0, 0, 0, 0, 0],
-            _dummy1: [0, 0, 0, 0],
-            _dummy2: [0, 0, 0, 0],
+        let uniform_data = skybox_vs::ty::Data {
+            modelMatrix: translation.into(),
             viewMatrix: view.into(),
-            projectionMatrix: proj.into(),
-            viewPosition: camera.get_position().into(),
-
-            id: self.id,
-            seed: self.seed,
-            size: self.radius,
-            color: colors,
-            colorAtm: RGBA::new(0x66D5ED, 0.0).as_rgb(),
-            colorWater: RGBA::new(0x00AEEF, 0.0).as_rgb(),
-            colorDeepWater: RGBA::new(0x383C80, 0.0).as_rgb(),
-            obliquity: 0.1
+            projMatrix: proj.into(),
+            seed: self.seed
         };
 
         Arc::new(self.uniform_buffer.next(uniform_data).unwrap())
     }
-
-    pub fn get_position(&self) -> [f32; 3] {
-        [self.translation.x, self.translation.y, self.translation.z]
-    }
-
-    pub fn get_mass(&self) -> f32 {
-        self.mass
-    }
-
-    pub fn get_rad(&self) -> f32 {
-        self.radius
-    }
-
-    pub fn get_id(&self) -> u32 {
-        self.id
-    }
-
-    pub fn get_velocity(&self) -> [f32; 3] {
-        [self.velocity.x, self.velocity.y, self.velocity.z]
-    }
 }
 
-mod terraplanet_vs {
+mod skybox_vs {
     vulkano_shaders::shader!{
         ty: "vertex",
         include: ["src/shaders"],
-        path: "src/shaders/terraplanet.vert"
+        path: "src/shaders/skybox.vert"
     }
 }
 
-mod terraplanet_fs {
+mod skybox_fs {
     vulkano_shaders::shader!{
         ty: "fragment",
         include: ["src/shaders"],
-        path: "src/shaders/terraplanet.frag"
+        path: "src/shaders/skybox.frag"
     }
 }
 
 #[allow(dead_code)]
-const X: &str = include_str!("shaders/terraplanet.vert");
+const X: &str = include_str!("shaders/skybox.vert");
 #[allow(dead_code)]
-const Y: &str = include_str!("shaders/terraplanet.frag");
-#[allow(dead_code)]
-const Z: &str = include_str!("shaders/lighting.glsl");
+const Y: &str = include_str!("shaders/skybox.frag");
 #[allow(dead_code)]
 const A: &str = include_str!("shaders/noise.glsl");

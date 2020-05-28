@@ -55,6 +55,7 @@ pub struct Sun {
     delta: Instant,
 
     translation: Vector3<f32>,
+    velocity: Vector3<f32>,
 
     vertex_shader: sun_vs::Shader,
     fragment_shader: sun_fs::Shader,
@@ -63,7 +64,7 @@ pub struct Sun {
 }
 
 impl Sun {
-    pub fn new(device: Arc<Device>, radius: f32, mass: f32, position: Vector3<f32>, id: u32, seed: f32) -> Self {
+    pub fn new(device: Arc<Device>, radius: f32, mass: f32, position: Vector3<f32>, id: u32, seed: f32, velocity: Vector3<f32>) -> Self {
         let mut is = Sun {
             device: device.clone(),
 
@@ -79,6 +80,7 @@ impl Sun {
             delta: Instant::now(),
 
             translation: position,
+            velocity: velocity,
 
             vertex_shader: sun_vs::Shader::load(device.clone()).unwrap(),
             fragment_shader: sun_fs::Shader::load(device.clone()).unwrap(),
@@ -130,7 +132,7 @@ impl Sun {
         // let elapsed = self.delta.elapsed();
 
         let aspect_ratio = 1024.0 / 768.0;
-        let proj = cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 1000.0);
+        let proj = cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 100000.0);
         let view = Matrix4::look_at(
             camera.get_position(),
             camera.get_lookat(),
@@ -169,6 +171,10 @@ impl Sun {
 
     pub fn get_id(&self) -> u32 {
         self.id
+    }
+
+    pub fn get_velocity(&self) -> [f32; 3] {
+        [self.velocity.x, self.velocity.y, self.velocity.z]
     }
 }
 

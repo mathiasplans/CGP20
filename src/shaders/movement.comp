@@ -34,7 +34,7 @@ layout(local_size_x = LOCAL_SIZE_X, local_size_y = 1, local_size_z = 1) in;
 // // Map the nr_of_threads to local_size_x
 // layout(local_size_x_id = 0) in;
 
-#define G 0.3
+#define G 1.0
 #define ACC_BOUNDRY 100.0
 
 shared thread_result thread_data[gl_WorkGroupSize.x];
