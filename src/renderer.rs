@@ -28,6 +28,9 @@ use winit::window::{WindowBuilder, Window};
 use winit::event_loop::{EventLoop, ControlFlow};
 use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState};
 use winit::event::WindowEvent::CursorMoved;
+use winit::dpi::PhysicalSize;
+use winit::window::Fullscreen;
+use winit::monitor::MonitorHandle;
 
 use cgmath::{Matrix3, Matrix4, Point3, Vector3, Rad};
 
@@ -37,6 +40,7 @@ use std::time::Instant;
 
 use std::collections::HashMap;
 use std::cmp;
+use std::process::exit;
 
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -73,6 +77,14 @@ impl Renderer {
 
         let event_loop = EventLoop::new();
         let surface = WindowBuilder::new().build_vk_surface(&event_loop, instance.clone()).unwrap();
+
+
+        // Create monitor handle
+        let handle: MonitorHandle = surface.window().available_monitors().nth(0).unwrap();
+
+        surface.window().set_inner_size(handle.size());
+        surface.window().set_fullscreen(Some(Fullscreen::Borderless(handle)));
+        surface.window().set_title("Spulkan");
         let dimensions: [u32; 2] = surface.window().inner_size().into();
         println!("{:?}", dimensions);
 
@@ -99,7 +111,7 @@ impl Renderer {
 
             Swapchain::new(dev.0.clone(), surface.clone(), caps.min_image_count, format, dimensions, 1,
                 usage, &queue, SurfaceTransform::Identity, alpha, PresentMode::Fifo,
-                FullscreenExclusive::Default, true, ColorSpace::SrgbNonLinear).unwrap()
+                FullscreenExclusive::Allowed, true, ColorSpace::SrgbNonLinear).unwrap()
         };
 
         Renderer {
@@ -134,7 +146,7 @@ impl Renderer {
             mass: mass,
             rad: rad,
             rotation: [0.0, 0.0, 0.0],
-            rotationRate: [rng.gen(), rng.gen(), rng.gen()],
+            rotationRate: [0.0, rng.gen(), 0.0],
             modelMatrix: [
                 [0.0, 0.0, 0.0, 0.0],
                 [0.0, 0.0, 0.0, 0.0],
@@ -264,6 +276,8 @@ impl Renderer {
         // Create skybox
         let skybox = SkyBox::new(self.device.clone());
 
+        let dimensions = self.dimensions;
+
         self.event_loop.run(move |e, _, control_flow| {
             match e {
                 Event::WindowEvent { event: CursorMoved { position: cursor_position, .. }, .. } => {
@@ -277,7 +291,13 @@ impl Renderer {
                 }
                 Event::WindowEvent { event: WindowEvent::KeyboardInput { input: KeyboardInput { virtual_keycode: kc, state: s, .. }, .. }, .. } => {
                     match s {
-                        ElementState::Pressed => camera.key_update(kc.unwrap(), true),
+                        ElementState::Pressed => {
+                            camera.key_update(kc.unwrap(), true);
+
+                            if kc.unwrap() == VirtualKeyCode::Escape {
+                                exit(0);
+                            }
+                        },
                         ElementState::Released => camera.key_update(kc.unwrap(), false)
                     }
                 },
@@ -292,6 +312,7 @@ impl Renderer {
 
                     if recreate_swapchain {
                         let dimensions: [u32; 2] = surface.window().inner_size().into();
+                        println!("{:?}\n", dimensions);
                         let (new_swapchain, new_images) = match swapchain.recreate_with_dimensions(dimensions) {
                             Ok(r) => r,
                             Err(SwapchainCreationError::UnsupportedDimensions) => return,
@@ -300,9 +321,9 @@ impl Renderer {
 
                         swapchain = new_swapchain;
                         framebuffers = {
-                            let dimensions = new_images[0].dimensions();
+                            let d = new_images[0].dimensions();
 
-                            let depth_buffer = AttachmentImage::transient(device.clone(), dimensions, Format::D16Unorm).unwrap();
+                            let depth_buffer = AttachmentImage::transient(device.clone(), d, Format::D16Unorm).unwrap();
 
                             let framebuffers = new_images.iter().map(|image| {
                                 Arc::new(
@@ -364,8 +385,8 @@ impl Renderer {
 
                     for x in suns {
                         let buffer = x.get_buffers();
-                        let pipeline = x.get_pipeline(device.clone(), render_pass.clone());
-                        let uniforms = x.get_uniforms(&camera);
+                        let pipeline = x.get_pipeline(device.clone(), render_pass.clone(), dimensions);
+                        let uniforms = x.get_uniforms(&camera, dimensions);
 
 
                         let descriptor_set = PersistentDescriptorSet::start(pipeline.descriptor_set_layout(0).unwrap().clone())
@@ -383,8 +404,8 @@ impl Renderer {
 
                     for x in terraplanets {
                         let buffer = x.get_buffers();
-                        let pipeline = x.get_pipeline(device.clone(), render_pass.clone());
-                        let uniforms = x.get_uniforms(&camera);
+                        let pipeline = x.get_pipeline(device.clone(), render_pass.clone(), dimensions);
+                        let uniforms = x.get_uniforms(&camera, dimensions);
 
 
                         let descriptor_set = PersistentDescriptorSet::start(pipeline.descriptor_set_layout(0).unwrap().clone())
@@ -402,8 +423,8 @@ impl Renderer {
 
                     for x in lavaplanets {
                         let buffer = x.get_buffers();
-                        let pipeline = x.get_pipeline(device.clone(), render_pass.clone());
-                        let uniforms = x.get_uniforms(&camera);
+                        let pipeline = x.get_pipeline(device.clone(), render_pass.clone(), dimensions);
+                        let uniforms = x.get_uniforms(&camera, dimensions);
 
                         let descriptor_set = PersistentDescriptorSet::start(pipeline.descriptor_set_layout(0).unwrap().clone())
                             .add_buffer(uniforms).unwrap()
@@ -421,8 +442,8 @@ impl Renderer {
                     // Skybox
                     {
                         let buffer = skybox.get_buffers();
-                        let pipeline = skybox.get_pipeline(device.clone(), render_pass.clone());
-                        let uniforms = skybox.get_uniforms(&camera);
+                        let pipeline = skybox.get_pipeline(device.clone(), render_pass.clone(), dimensions);
+                        let uniforms = skybox.get_uniforms(&camera, dimensions);
 
                         let descriptor_set = PersistentDescriptorSet::start(pipeline.descriptor_set_layout(0).unwrap().clone())
                             .add_buffer(uniforms).unwrap()

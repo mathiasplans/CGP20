@@ -106,7 +106,7 @@ impl Sun {
         ((*self.vertex_buffer.as_ref().unwrap()).clone(), (*self.normal_buffer.as_ref().unwrap()).clone(), (*self.index_buffer.as_ref().unwrap()).clone())
     }
 
-    pub fn get_pipeline(&self, device: Arc<Device>, render_pass: Arc<dyn RenderPassAbstract + Send + Sync>) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
+    pub fn get_pipeline(&self, device: Arc<Device>, render_pass: Arc<dyn RenderPassAbstract + Send + Sync>, dimensions: [u32; 2]) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
         let pipeline = Arc::new(GraphicsPipeline::start()
             .vertex_input(TwoBuffersDefinition::<Vertex, Normal>::new())
             .vertex_shader(self.vertex_shader.main_entry_point(), ())
@@ -114,7 +114,7 @@ impl Sun {
             .viewports_dynamic_scissors_irrelevant(1)
             .viewports(iter::once(Viewport {
                 origin: [0.0, 0.0],
-                dimensions: [1024.0, 768.0],
+                dimensions: [dimensions[0] as f32, dimensions[1] as f32],
                 depth_range: 0.0 .. 1.0,
             }))
             .fragment_shader(self.fragment_shader.main_entry_point(), ())
@@ -128,10 +128,10 @@ impl Sun {
         pipeline
     }
 
-    pub fn get_uniforms(&self, camera: &Camera) -> Arc<CpuBufferPoolSubbuffer<sun_vs::ty::Data, Arc<StdMemoryPool>>> {
+    pub fn get_uniforms(&self, camera: &Camera, dimensions: [u32; 2]) -> Arc<CpuBufferPoolSubbuffer<sun_vs::ty::Data, Arc<StdMemoryPool>>> {
         // let elapsed = self.delta.elapsed();
 
-        let aspect_ratio = 1024.0 / 768.0;
+        let aspect_ratio = dimensions[0] as f32 / dimensions[1] as f32;
         let proj = cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 100000.0);
         let view = Matrix4::look_at(
             camera.get_position(),
